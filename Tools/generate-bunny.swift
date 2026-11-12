@@ -540,8 +540,46 @@ func drawRibbons(_ ctx: CGContext, _ p: Pose, fromBack: Bool = false) {
     }
 }
 
+// カフ的眼睛：深靛藍虹膜、裡面一圈紅色細環、黃色水滴形瞳孔光點，上眼線粗、眼尾往外勾。
+func drawKafEye(_ ctx: CGContext, _ c: CGPoint, wide: Bool) {
+    ctx.setLineCap(.round)
+    let w: CGFloat = wide ? 9.5 : 8.5, h: CGFloat = wide ? 11.5 : 10
+    let eye = ellipse(c.x, c.y - 0.5, w, h)
+    if wide { shape(ctx, ellipse(c.x, c.y - 0.5, w + 1.5, h + 1), white, lineWidth: 1.4) }
+    shape(ctx, eye, hex(0x1C1660), stroke: false)
+    ctx.saveGState()
+    ctx.addPath(eye)
+    ctx.clip()
+    shape(ctx, ellipse(c.x, c.y - 3, w, h * 0.7), hex(0x3B2FA6), stroke: false)   // 下半部亮一點的靛藍
+    ctx.restoreGState()
+    // 紅色細環（只畫下半圈多一點，像參考圖那樣）
+    let ring = CGMutablePath()
+    ring.addArc(center: CGPoint(x: c.x, y: c.y - 0.5), radius: w * 0.34, startAngle: .pi * 1.05, endAngle: .pi * 2.05, clockwise: false)
+    line(ctx, ring, hex(0xE0383A, 0.85), width: 0.6)
+    // 黃色水滴光點
+    let drop = CGMutablePath()
+    let d = CGPoint(x: c.x + 0.6, y: c.y - 0.3)
+    drop.move(to: CGPoint(x: d.x + 0.4, y: d.y + 2.3))
+    drop.addQuadCurve(to: CGPoint(x: d.x - 0.2, y: d.y - 1.6), control: CGPoint(x: d.x + 1.9, y: d.y - 0.3))
+    drop.addQuadCurve(to: CGPoint(x: d.x + 0.4, y: d.y + 2.3), control: CGPoint(x: d.x - 1.6, y: d.y + 0.2))
+    shape(ctx, drop, hex(0xFFE33A), stroke: false)
+    // 粗上眼線 + 眼尾往外上勾
+    let lid = CGMutablePath()
+    lid.move(to: CGPoint(x: c.x - 5, y: c.y + 2.8))
+    lid.addQuadCurve(to: CGPoint(x: c.x + 4.6, y: c.y + 3.4), control: CGPoint(x: c.x, y: c.y + 6.4))
+    lid.addLine(to: CGPoint(x: c.x + 6.6, y: c.y + 5))
+    line(ctx, lid, outline, width: 2.4)
+    if !wide {   // 微微下垂的眼皮，讓眼神比較冷靜
+        let shade = CGMutablePath()
+        shade.move(to: CGPoint(x: c.x - 4.2, y: c.y + 3))
+        shade.addQuadCurve(to: CGPoint(x: c.x + 4.2, y: c.y + 3), control: CGPoint(x: c.x, y: c.y + 1.6))
+        line(ctx, shade, hex(0x1C1660, 0.6), width: 1)
+    }
+}
+
 func drawEye(_ ctx: CGContext, _ c: CGPoint, _ eyes: Eyes) {
     ctx.setLineCap(.round)
+    if kaf && (eyes == .open || eyes == .wide) { return drawKafEye(ctx, c, wide: eyes == .wide) }
     switch eyes {
     case .open:
         let eye = ellipse(c.x, c.y, 8.5, 11)
