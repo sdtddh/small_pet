@@ -168,7 +168,7 @@
       "slot" : "head"
     },
     {
-      "dungeon" : false,
+      "dungeon" : true,
       "id" : "goggles",
       "name" : "飛行護目鏡",
       "power" : 4,
@@ -182,14 +182,14 @@
       "slot" : "face"
     },
     {
-      "dungeon" : false,
+      "dungeon" : true,
       "id" : "bell_collar",
       "name" : "鈴鐺項圈",
       "power" : 2,
       "slot" : "neck"
     },
     {
-      "dungeon" : false,
+      "dungeon" : true,
       "id" : "balloon",
       "name" : "氣球",
       "power" : 1,
@@ -203,21 +203,21 @@
       "slot" : "hand"
     },
     {
-      "dungeon" : false,
+      "dungeon" : true,
       "id" : "backpack",
       "name" : "小書包",
       "power" : 3,
       "slot" : "back"
     },
     {
-      "dungeon" : false,
+      "dungeon" : true,
       "id" : "wings",
       "name" : "天使翅膀",
       "power" : 6,
       "slot" : "back"
     },
     {
-      "dungeon" : false,
+      "dungeon" : true,
       "id" : "vip_wings",
       "name" : "VIP 星耀之翼",
       "power" : 20,

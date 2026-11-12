@@ -23,7 +23,8 @@ final class Wardrobe: ObservableObject {
         self.stats = stats
         let saved = UserDefaults.standard.dictionary(forKey: Self.defaultsKey) as? [String: String] ?? [:]
         // 過濾掉已經不存在的服裝（例如素材被刪掉了）。
-        let valid = Set(sprites.manifest.outfits.map(\.id))
+        // 也過濾掉還沒從地下城拿到的服裝。
+        let valid = Set(sprites.manifest.outfits.filter { $0.dungeon != true || stats.owns($0.id) }.map(\.id))
         equipped = saved.filter { valid.contains($0.value) }
     }
 

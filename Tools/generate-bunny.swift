@@ -679,7 +679,12 @@ let outfitPower: [String: Int] = [
     "balloon": 1, "lollipop": 2, "backpack": 3, "wings": 6, "vip_wings": 20,
 ]
 // 只能從地下城拿到的服裝（還沒拿到前不會出現在衣櫃）。
-let dungeonOutfits: Set<String> = ["straw_hat", "witch_hat", "cape", "crown", "ribbon"]
+let dungeonOutfits: Set<String> = [
+    "straw_hat", "balloon", "bell_collar",          // 草原
+    "witch_hat", "cape", "goggles", "backpack",     // 森林
+    "crown", "ribbon", "wings",                     // 城堡
+    "vip_wings",                                    // 星空神殿
+]
 
 let outfits: [Outfit] = [
     Outfit(id: "cap", name: "棒球帽", slot: "head") { ctx, p in

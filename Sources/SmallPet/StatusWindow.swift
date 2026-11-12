@@ -23,7 +23,7 @@ final class StatusWindowController {
     func show() {
         if window == nil {
             let w = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 360, height: 430),
+                contentRect: NSRect(x: 0, y: 0, width: 360, height: 510),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -65,7 +65,7 @@ struct StatusView: View {
                 bagTab.tabItem { Text("背包") }
             }
             .padding()
-            .frame(minWidth: 360, minHeight: 430)
+            .frame(minWidth: 360, minHeight: 510)
         }
     }
 
