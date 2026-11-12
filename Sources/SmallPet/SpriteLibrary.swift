@@ -1,11 +1,12 @@
-// SpriteLibrary.swift —— 讀取 Resources/ 裡的 manifest.json 與每一格圖片。
+// SpriteLibrary.swift —— 讀取目前角色的 manifest.json 與每一格圖片。
 //
-// 資料夾結構：
-//   Resources/manifest.json            動作格數 / 速度、服裝清單
-//   Resources/body/<動作>_<格>.png       寵物本體
-//   Resources/outfits/<服裝id>/<動作>_<格>.png   服裝疊圖（與本體同尺寸、同格數）
-//   Resources/looks/hair/<髮型id>/{behind,head}/<動作>_<格>.png    外觀：髮型（有的話會取代 body/）
-//   Resources/looks/clothes/<服裝id>/{base,top}/<動作>_<格>.png     外觀：衣服
+// 資料夾結構（<角色> 見 Character.swift）：
+//   Resources/characters/<角色>/manifest.json            動作格數 / 速度、服裝清單
+//   Resources/characters/<角色>/body/<動作>_<格>.png       寵物本體
+//   Resources/characters/<角色>/outfits/<服裝id>/<動作>_<格>.png   服裝疊圖（與本體同尺寸、同格數）
+//   Resources/characters/<角色>/looks/hair/<髮型id>/{behind,head}/<動作>_<格>.png  外觀：髮型（有的話會取代 body/）
+//   Resources/characters/<角色>/looks/clothes/<衣服id>/{base,top}/<動作>_<格>.png  外觀：衣服
+//   Resources/props/<名字>.png                           家具等道具（所有角色共用）
 //
 // 圖片可以是 .png 或 .pdf（向量，放大不糊）。換外觀只要替換檔案，不用改程式。
 import AppKit
@@ -60,16 +61,18 @@ struct Look: Equatable {
 final class SpriteLibrary {
 
     let manifest: Manifest
-    let root: URL   // Resources 資料夾（台詞檔等也放這裡）
+    let root: URL           // 目前角色的資料夾（台詞檔 phrases.json 也放這裡）
+    private let shared: URL // Resources 資料夾（共用的道具圖）
 
     // 讀過的圖片快取起來，key 是 "body/walk" 或 "outfits/cap/walk"。
     private var cache: [String: [NSImage]] = [:]
 
     init() {
-        guard let root = Bundle.module.url(forResource: "Resources", withExtension: nil) else {
-            fatalError("找不到 Resources 資料夾，請先執行 swift Tools/generate-sprites.swift")
+        guard let shared = Bundle.module.url(forResource: "Resources", withExtension: nil) else {
+            fatalError("找不到 Resources 資料夾，請先執行 swift Tools/generate-bunny.swift")
         }
-        self.root = root
+        self.shared = shared
+        root = shared.appendingPathComponent("characters/\(Character.current)")
         do {
             let data = try Data(contentsOf: root.appendingPathComponent("manifest.json"))
             manifest = try JSONDecoder().decode(Manifest.self, from: data)
@@ -133,7 +136,7 @@ final class SpriteLibrary {
 
     // 道具圖（Resources/props/<名字>.png），例如降落傘的傘面。
     func prop(_ name: String) -> NSImage? {
-        NSImage(contentsOf: root.appendingPathComponent("props/\(name).png"))
+        NSImage(contentsOf: shared.appendingPathComponent("props/\(name).png"))
     }
 
     func outfits(in slot: String) -> [Manifest.Outfit] {

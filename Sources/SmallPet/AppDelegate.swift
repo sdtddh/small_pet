@@ -95,6 +95,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // 右鍵和選單列共用同一份選單。
+    // 換角色會重開 App（等級、背包、衣櫃都是各角色分開的）。
+    @objc private func switchCharacter(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        Character.switchTo(id)
+    }
+
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
 
@@ -109,6 +115,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let actionItem = NSMenuItem(title: "動作", action: nil, keyEquivalent: "")
         actionItem.submenu = actionMenu
         menu.addItem(actionItem)
+
+        let characterMenu = NSMenu()
+        for character in Character.all {
+            let item = NSMenuItem(title: character.name, action: #selector(switchCharacter(_:)), keyEquivalent: "")
+            item.representedObject = character.id
+            item.target = self
+            item.state = Character.current == character.id ? .on : .off
+            characterMenu.addItem(item)
+        }
+        let characterItem = NSMenuItem(title: "角色", action: nil, keyEquivalent: "")
+        characterItem.submenu = characterMenu
+        menu.addItem(characterItem)
 
         let hideItem = NSMenuItem(title: pet.concealed ? "顯示全部" : "隱藏全部", action: #selector(toggleEverything), keyEquivalent: "f")
         hideItem.keyEquivalentModifierMask = [.option]

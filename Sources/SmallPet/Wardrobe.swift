@@ -8,8 +8,9 @@ import SwiftUI
 @MainActor
 final class Wardrobe: ObservableObject {
 
-    private static let defaultsKey = "equippedOutfits"
-    private static let lookKey = "look"
+    // 每個角色各自記住穿什麼；第一個角色沿用舊的 key。
+    private static let defaultsKey = Character.isOriginal ? "equippedOutfits" : "equippedOutfits.\(Character.current)"
+    private static let lookKey = Character.isOriginal ? "look" : "look.\(Character.current)"
 
     // 部位 id → 服裝 id。
     @Published private(set) var equipped: [String: String]
@@ -28,7 +29,8 @@ final class Wardrobe: ObservableObject {
         self.stats = stats
         let saved = UserDefaults.standard.dictionary(forKey: Self.defaultsKey) as? [String: String] ?? [:]
         // 過濾掉已經不存在的服裝（例如素材被刪掉了）。
-        let valid = Set(sprites.manifest.outfits.map(\.id))
+        // 也過濾掉還沒從地下城拿到的服裝。
+        let valid = Set(sprites.manifest.outfits.filter { $0.dungeon != true || stats.owns($0.id) }.map(\.id))
         equipped = saved.filter { valid.contains($0.value) }
 
         var look = sprites.defaultLook

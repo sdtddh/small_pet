@@ -1,0 +1,346 @@
+{
+  "actions" : {
+    "dance" : {
+      "fps" : 8,
+      "frames" : 16,
+      "loop" : true
+    },
+    "dragged" : {
+      "fps" : 5,
+      "frames" : 2,
+      "loop" : true
+    },
+    "eat" : {
+      "fps" : 5,
+      "frames" : 4,
+      "loop" : true
+    },
+    "fall" : {
+      "fps" : 8,
+      "frames" : 2,
+      "loop" : true
+    },
+    "fly" : {
+      "fps" : 4,
+      "frames" : 2,
+      "loop" : true
+    },
+    "idle" : {
+      "fps" : 3,
+      "frames" : 4,
+      "loop" : true
+    },
+    "jump" : {
+      "fps" : 0,
+      "frames" : 4,
+      "loop" : false
+    },
+    "keytap" : {
+      "fps" : 8,
+      "frames" : 4,
+      "loop" : true
+    },
+    "parachute" : {
+      "fps" : 4,
+      "frames" : 4,
+      "loop" : true
+    },
+    "run" : {
+      "fps" : 16,
+      "frames" : 6,
+      "loop" : true
+    },
+    "sit" : {
+      "fps" : 2,
+      "frames" : 2,
+      "loop" : true
+    },
+    "sleep" : {
+      "fps" : 1.2,
+      "frames" : 2,
+      "loop" : true
+    },
+    "swing" : {
+      "fps" : 1.6666666666666667,
+      "frames" : 4,
+      "loop" : true
+    },
+    "tap" : {
+      "fps" : 6,
+      "frames" : 2,
+      "loop" : false
+    },
+    "typing" : {
+      "fps" : 6,
+      "frames" : 4,
+      "loop" : true
+    },
+    "walk" : {
+      "fps" : 10,
+      "frames" : 6,
+      "loop" : true
+    }
+  },
+  "backFrames" : {
+    "dance" : [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ]
+  },
+  "canvas" : {
+    "height" : 112,
+    "width" : 112
+  },
+  "looks" : {
+    "clothes" : [
+      {
+        "id" : "original",
+        "name" : "カフ"
+      },
+      {
+        "id" : "jirai",
+        "name" : "地雷系"
+      },
+      {
+        "id" : "ryousan",
+        "name" : "量產型"
+      },
+      {
+        "id" : "sailor",
+        "name" : "日系水手服"
+      },
+      {
+        "id" : "street_hoodie",
+        "name" : "日系街頭帽T"
+      },
+      {
+        "id" : "yukata",
+        "name" : "日系浴衣"
+      }
+    ],
+    "hair" : [
+      {
+        "id" : "original",
+        "name" : "カフ"
+      },
+      {
+        "id" : "jirai_twintails",
+        "name" : "地雷系雙馬尾"
+      },
+      {
+        "id" : "wolf_milktea",
+        "name" : "日系鯔魚頭・奶茶"
+      },
+      {
+        "id" : "wolf_silver",
+        "name" : "日系鯔魚頭・黑銀挑染"
+      },
+      {
+        "id" : "hime_cut",
+        "name" : "日系公主切"
+      },
+      {
+        "id" : "short_bob",
+        "name" : "日系短鮑伯"
+      }
+    ]
+  },
+  "name" : "カフ",
+  "outfits" : [
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "cap",
+      "name" : "棒球帽",
+      "power" : 3,
+      "slot" : "head"
+    },
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "party_hat",
+      "name" : "派對帽",
+      "power" : 2,
+      "slot" : "head"
+    },
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "glasses",
+      "name" : "圓框眼鏡",
+      "power" : 2,
+      "slot" : "face"
+    },
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "sunglasses",
+      "name" : "墨鏡",
+      "power" : 4,
+      "slot" : "face"
+    },
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "scarf",
+      "name" : "圍巾",
+      "power" : 3,
+      "slot" : "neck"
+    },
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "bowtie",
+      "name" : "領結",
+      "power" : 2,
+      "slot" : "neck"
+    },
+    {
+      "behind" : false,
+      "dungeon" : true,
+      "id" : "straw_hat",
+      "name" : "草帽",
+      "power" : 5,
+      "slot" : "head"
+    },
+    {
+      "behind" : false,
+      "dungeon" : true,
+      "id" : "witch_hat",
+      "name" : "魔法帽",
+      "power" : 9,
+      "slot" : "head"
+    },
+    {
+      "behind" : false,
+      "dungeon" : true,
+      "id" : "cape",
+      "name" : "披風",
+      "power" : 8,
+      "slot" : "neck"
+    },
+    {
+      "behind" : false,
+      "dungeon" : true,
+      "id" : "crown",
+      "name" : "王冠",
+      "power" : 14,
+      "slot" : "head"
+    },
+    {
+      "behind" : false,
+      "dungeon" : true,
+      "id" : "ribbon",
+      "name" : "蝴蝶結",
+      "power" : 11,
+      "slot" : "head"
+    },
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "flower_crown",
+      "name" : "花冠",
+      "power" : 3,
+      "slot" : "head"
+    },
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "headphones",
+      "name" : "耳機",
+      "power" : 2,
+      "slot" : "head"
+    },
+    {
+      "behind" : false,
+      "dungeon" : true,
+      "id" : "goggles",
+      "name" : "飛行護目鏡",
+      "power" : 4,
+      "slot" : "face"
+    },
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "heart_glasses",
+      "name" : "愛心眼鏡",
+      "power" : 2,
+      "slot" : "face"
+    },
+    {
+      "behind" : false,
+      "dungeon" : true,
+      "id" : "bell_collar",
+      "name" : "鈴鐺項圈",
+      "power" : 2,
+      "slot" : "neck"
+    },
+    {
+      "behind" : false,
+      "dungeon" : true,
+      "id" : "balloon",
+      "name" : "氣球",
+      "power" : 1,
+      "slot" : "hand"
+    },
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "lollipop",
+      "name" : "棒棒糖",
+      "power" : 2,
+      "slot" : "hand"
+    },
+    {
+      "behind" : false,
+      "dungeon" : true,
+      "id" : "backpack",
+      "name" : "小書包",
+      "power" : 3,
+      "slot" : "back"
+    },
+    {
+      "behind" : true,
+      "dungeon" : true,
+      "id" : "wings",
+      "name" : "天使翅膀",
+      "power" : 6,
+      "slot" : "back"
+    },
+    {
+      "behind" : true,
+      "dungeon" : true,
+      "id" : "vip_wings",
+      "name" : "VIP 星耀之翼",
+      "power" : 20,
+      "slot" : "back"
+    }
+  ],
+  "slots" : [
+    {
+      "id" : "back",
+      "name" : "背後"
+    },
+    {
+      "id" : "neck",
+      "name" : "脖子"
+    },
+    {
+      "id" : "face",
+      "name" : "臉"
+    },
+    {
+      "id" : "head",
+      "name" : "頭"
+    },
+    {
+      "id" : "hand",
+      "name" : "手上"
+    }
+  ]
+}
