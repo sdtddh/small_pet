@@ -1,6 +1,6 @@
 # SmallPet 🐾
 
-一隻用 **Swift + AppKit** 寫的 macOS 桌面寵物，主角是《明日方舟 Arknights》的 **阿米婭 Amiya**（Q 版同人）。她會自己走路、跑步、跳躍、坐下、睡覺，可以抓起來甩出去，還能換裝。
+一隻用 **Swift + AppKit** 寫的 macOS 桌面寵物，主角是《明日方舟 Arknights》的 **阿米婭 Amiya**，也可以切換成《神椿市協奏中》的 **カフ**（都是 Q 版同人）。她會自己走路、跑步、跳躍、坐下、睡覺，可以抓起來甩出去，還能換裝。
 
 ## 需要什麼
 
@@ -31,6 +31,7 @@ swift run
 - **雙擊**：跳一下
 - **右鍵** 或 **選單列的 🐾 圖示**：
   - 動作 ▸ 發呆 / 走路 / 跑步 / 跳躍 / 坐下 / 睡覺 / 跳舞
+  - 角色 ▸ 阿米婭 / カフ：切換時 App 會自動重開一下。每個角色的等級、背包、地下城戰利品、身上的衣服和台詞都是分開的；家具共用
   - 自動行動：打勾時她會自己隨機換動作（偏安靜，常常跑去螢幕角落坐一兩分鐘；電腦桌、鞦韆、飛機有擺出來的話也會自己過去）；取消後會一直做你選的動作
   - 說句話：讓她隨便說一句
   - 餵食：每天 2 次，餐桌擺上胡蘿蔔，她自己走過去坐下來吃，吃完拿到 XP（見下方「練等」）
@@ -88,7 +89,8 @@ Xcode 會把這個 Swift Package 當專案打開，按左上角 ▶︎ 就能跑
 | `Sources/SmallPet/Pet.swift` | 行為：動作狀態機、重力、跳躍、拖曳甩出（手感參數在 `Tuning`） |
 | `Sources/SmallPet/PetAction.swift` | 所有動作的定義、自動模式的權重與持續時間 |
 | `Sources/SmallPet/PetView.swift` | 用多層圖片疊出寵物 + 服裝、處理滑鼠 |
-| `Sources/SmallPet/SpriteLibrary.swift` | 讀取 `Resources/` 的圖片與 `manifest.json` |
+| `Sources/SmallPet/Character.swift` | 角色清單、目前角色、切換（重開 App） |
+| `Sources/SmallPet/SpriteLibrary.swift` | 讀取目前角色的圖片與 `manifest.json`，以及共用的道具圖 |
 | `Sources/SmallPet/PetSpeech.swift` | 說話：讀台詞庫、頭上的對話泡泡 |
 | `Sources/SmallPet/PetStats.swift` | 練等：等級、XP、每天餵食次數、存檔 |
 | `Sources/SmallPet/Scenery.swift` | 家具佈景視窗（餐桌、電腦桌、鞦韆的繩子、飛機前後兩層）、⌥F 全域快捷鍵的註冊 |
@@ -96,18 +98,20 @@ Xcode 會把這個 Swift Package 當專案打開，按左上角 ▶︎ 就能跑
 | `Sources/SmallPet/StatusWindow.swift` | 狀態視窗（SwiftUI）：狀態 / 地下城 / 背包三頁 |
 | `Sources/SmallPet/Wardrobe.swift` | 換裝狀態與衣櫃視窗（SwiftUI） |
 | `Sources/SmallPet/PetWindow.swift` | 透明、無邊框、置頂的視窗 |
-| `Tools/generate-sprites.swift` | 產生舊版小貓素材（備用） |
-| `Tools/generate-bunny.swift` | 產生阿米婭的 Q 版向量素材（目前使用中） |
+| `Tools/generate-bunny.swift` | 產生角色的 Q 版向量素材（`amiya` / `kaf`）與家具 |
 
 ## 換外觀 / 加衣服
 
-所有圖片都在 `Sources/SmallPet/Resources/`：
+所有圖片都在 `Sources/SmallPet/Resources/`，每個角色一個資料夾：
 
 ```
 Resources/
-  manifest.json                    動作格數、播放速度、部位、服裝清單
-  body/<動作>_<格>.png              本體，例如 walk_0.png ~ walk_5.png
-  outfits/<服裝id>/<動作>_<格>.png   服裝疊圖
+  characters/<角色>/
+    manifest.json                    角色名稱、動作格數、播放速度、部位、服裝清單
+    phrases.json                     這個角色的台詞
+    body/<動作>_<格>.png              本體，例如 walk_0.png ~ walk_5.png
+    outfits/<服裝id>/<動作>_<格>.png   服裝疊圖
+  props/                             家具、飛機、降落傘（所有角色共用）
 ```
 
 規則很簡單：
@@ -121,20 +125,24 @@ Resources/
 **新增一件衣服**：建 `outfits/<新id>/` 資料夾放圖，然後在 `manifest.json` 的 `outfits` 加一筆
 `{"id": "新id", "name": "顯示名稱", "slot": "head"}`（slot 可用 `head`、`face`、`neck`）。
 
-**換掉整隻寵物**：直接用自己的圖覆蓋 `body/` 底下的檔案即可。
+**換掉整隻寵物**：直接用自己的圖覆蓋 `characters/<角色>/body/` 底下的檔案即可。
 
-**重新產生素材**（會覆蓋 `body/`、`outfits/` 和 `manifest.json`）：
+**新增角色**：在 `generate-bunny.swift` 的 `characterNames` 和 `Character.swift` 的 `Character.all` 各加一筆，畫出她的特徵（參考 `kaf` 的寫法），再放一份 `phrases.json`。
+
+**重新產生素材**（會覆蓋該角色的 `body/`、`outfits/`、`manifest.json`，以及共用的 `props/`；不會動到台詞）：
 
 ```bash
-swift Tools/generate-bunny.swift    # 阿米婭（目前使用中）
-swift Tools/generate-sprites.swift  # 換成舊版小貓
+swift Tools/generate-bunny.swift        # 阿米婭
+swift Tools/generate-bunny.swift kaf    # カフ
 ```
+
+（`Tools/generate-sprites.swift` 是最早的小貓版，已經不支援角色資料夾，只留著參考。）
 
 改完素材後重新 `swift run` 就會生效。
 
 ## 改台詞
 
-台詞都在 `Sources/SmallPet/Resources/phrases.json`，依情境分類，每次從該類隨機挑一句：
+台詞在 `Sources/SmallPet/Resources/characters/<角色>/phrases.json`，每個角色各一份，依情境分類，每次從該類隨機挑一句：
 
 | 情境 | 什麼時候說 |
 |------|-----------|
@@ -176,7 +184,7 @@ swift Tools/generate-sprites.swift  # 換成舊版小貓
 - 戰利品服裝的戰鬥力：草帽 +5、氣球 +1、鈴鐺項圈 +2、魔法帽 +9、披風 +8、護目鏡 +4、小書包 +3、王冠 +14、蝴蝶結 +11、天使翅膀 +6、VIP 星耀之翼 +20。拿到之後才會出現在衣櫃。
 - 測試時不想等：用 `SMALLPET_FAST=1 swift run` 啟動，分鐘會變成秒。
 - 地下城清單在 `Dungeon.swift`。
-- 進度存在 `~/Library/Application Support/SmallPet/save.json`，想重來就刪掉這個檔案。
+- 進度存在 `~/Library/Application Support/SmallPet/save.json`（カフ是 `save-kaf.json`），想重來就刪掉對應的檔案。
 
 ## 之後可以練習加什麼
 
@@ -186,4 +194,4 @@ swift Tools/generate-sprites.swift  # 換成舊版小貓
 
 ## 聲明
 
-阿米婭（Amiya）及《明日方舟》相關角色版權屬於 Hypergryph / Yostar。本專案為非商業的粉絲同人作品，所有素材皆由程式自行繪製。
+阿米婭（Amiya）及《明日方舟》相關角色版權屬於 Hypergryph / Yostar；カフ及《神椿市協奏中》相關角色版權屬於 KAMITSUBAKI STUDIO / KTB。本專案為非商業的粉絲同人作品，所有素材皆由程式自行繪製，不包含官方圖片。

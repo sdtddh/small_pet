@@ -5,7 +5,7 @@
 //   - 升到下一級需要「50 × 目前等級」XP，多出來的 XP 會留到下一級。
 //   - 戰鬥力 = 等級 × 10 + 身上服裝的加成。
 //   - 每天最多出門冒險 3 次（規則在 Dungeon.swift）。
-// 存檔是 ~/Library/Application Support/SmallPet/save.json，重開 App 還在。
+// 存檔是 ~/Library/Application Support/SmallPet/save.json（其他角色是 save-<角色>.json），重開 App 還在。
 import Foundation
 
 struct GameState: Codable {
@@ -68,7 +68,8 @@ final class PetStats: ObservableObject {
     init() {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SmallPet", isDirectory: true)
-        saveURL = dir.appendingPathComponent("save.json")
+        // 每個角色各自練等；第一個角色沿用舊檔名。
+        saveURL = dir.appendingPathComponent(Character.isOriginal ? "save.json" : "save-\(Character.current).json")
         if let data = try? Data(contentsOf: saveURL),
            let saved = try? Self.decoder.decode(GameState.self, from: data) {
             state = saved

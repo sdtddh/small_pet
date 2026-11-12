@@ -7,7 +7,8 @@ import SwiftUI
 @MainActor
 final class Wardrobe: ObservableObject {
 
-    private static let defaultsKey = "equippedOutfits"
+    // 每個角色各自記住穿什麼；第一個角色沿用舊的 key。
+    private static let defaultsKey = Character.isOriginal ? "equippedOutfits" : "equippedOutfits.\(Character.current)"
 
     // 部位 id → 服裝 id。
     @Published private(set) var equipped: [String: String]
