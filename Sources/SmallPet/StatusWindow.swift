@@ -75,7 +75,7 @@ struct StatusView: View {
 
     private var statusTab: some View {
         VStack(spacing: 14) {
-            PetPreview(sprites: wardrobe.sprites, outfits: wardrobe.equipped)
+            PetPreview(sprites: wardrobe.sprites, outfits: wardrobe.equipped, look: wardrobe.look)
                 .frame(width: 120, height: 120)
                 .opacity(away ? 0.3 : 1)
 

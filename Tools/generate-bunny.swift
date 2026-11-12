@@ -183,149 +183,108 @@ let footFront = CGPoint(x: 56, y: 8)
 
 // MARK: - 本體
 
-func drawBody(_ ctx: CGContext, _ p: Pose) {
-    if p.back { return drawBodyBack(ctx, p) }
+// 本體拆成四層，好讓髮型和服裝可以自由搭配（見下方「外觀」）。由下往上：
+//   hairBehind  垂在身體後面的長髮（雙馬尾、公主切的長髮…）
+//   base        腳、垂下的手、衣服（還有降落傘的繩子）
+//   head        頭：兔耳、臉、頭髮（背對時還有兔尾巴和蓋住背的長髮）
+//   top         擋在頭前面的東西：舉高的手、胡蘿蔔、睡覺的 z
+// 四層全畫 = 完整的她；App 會依目前選的髮型 / 服裝，各層挑對應的圖疊起來。
+enum BodyPart { case hairBehind, base, head, top }
+let allParts: Set<BodyPart> = [.hairBehind, .base, .head, .top]
+
+func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
+    if p.back { return drawBodyBack(ctx, p, parts) }
     let ut = upperTransform(p)
 
-    // 降落傘的繩子：從兩手拉到畫布頂端，接上視窗上方那頂傘（最先畫，被頭擋住也沒關係）
-    if p.straps {
-        for (s, angle, top) in [(shoulderBack, p.armBack, strapTop[0]), (shoulderFront, p.armFront, strapTop[1])] {
-            line(ctx, segment(hand(s, angle).applying(ut), top), outline, width: 1.3)
+    if parts.contains(.hairBehind) {
+        withState(ctx, head(p)) { look.hair.behind(ctx, p) }
+    }
+
+    if parts.contains(.base) {
+        // 降落傘的繩子：從兩手拉到畫布頂端，接上視窗上方那頂傘（最先畫，被頭擋住也沒關係）
+        if p.straps {
+            for (s, angle, top) in [(shoulderBack, p.armBack, strapTop[0]), (shoulderFront, p.armFront, strapTop[1])] {
+                line(ctx, segment(hand(s, angle).applying(ut), top), outline, width: 1.3)
+            }
+        }
+
+        // 後腳 + 後手（在身體後面）
+        drawLeg(ctx, from: hipBack.applying(ut), to: CGPoint(x: footBack.x + p.backFoot.x, y: footBack.y + p.backFoot.y))
+        if !raised(p.armBack) { withState(ctx, upper(p)) { drawArm(ctx, shoulderBack, p.armBack) } }
+        drawLeg(ctx, from: hipFront.applying(ut), to: CGPoint(x: footFront.x + p.frontFoot.x, y: footFront.y + p.frontFoot.y))
+
+        withState(ctx, upper(p)) {
+            look.clothes.torso(ctx, p)
+            if !raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
         }
     }
 
-    // 後腳 + 後手（在身體後面）
-    drawLeg(ctx, from: hipBack.applying(ut), to: CGPoint(x: footBack.x + p.backFoot.x, y: footBack.y + p.backFoot.y))
-    if !raised(p.armBack) { withState(ctx, upper(p)) { drawArm(ctx, shoulderBack, p.armBack) } }
-    drawLeg(ctx, from: hipFront.applying(ut), to: CGPoint(x: footFront.x + p.frontFoot.x, y: footFront.y + p.frontFoot.y))
-
-    withState(ctx, upper(p)) {
-        // 百褶裙
-        let s = CGMutablePath()
-        s.move(to: CGPoint(x: 39, y: 28))
-        s.addLine(to: CGPoint(x: 61, y: 28))
-        s.addLine(to: CGPoint(x: 67, y: 14))
-        s.addQuadCurve(to: CGPoint(x: 50, y: 13), control: CGPoint(x: 58, y: 11))
-        s.addQuadCurve(to: CGPoint(x: 33, y: 14), control: CGPoint(x: 42, y: 11))
-        s.closeSubpath()
-        shape(ctx, s, skirt)
-        for (a, b) in [(CGPoint(x: 44, y: 27), CGPoint(x: 40, y: 14)),
-                       (CGPoint(x: 50, y: 27), CGPoint(x: 50, y: 14)),
-                       (CGPoint(x: 56, y: 27), CGPoint(x: 60, y: 14))] {
-            line(ctx, segment(a, b), skirtLight, width: 1.6)
-        }
-
-        // 深藍上衣，下襬是一排小荷葉邊
-        shape(ctx, rounded(44, 25, 14, 13, 3), top, lineWidth: 1.6)
-        for x in stride(from: CGFloat(46.5), through: 56, by: 4.5) {
-            shape(ctx, ellipse(x, 25, 5, 4), top, lineWidth: 1.2)
-        }
-
-        // 敞開的黑外套：左右兩片，內側水藍滾邊
-        shape(ctx, rounded(33.5, 17, 13, 21, 5), jacket)
-        shape(ctx, rounded(55.5, 17, 10, 21, 5), jacket)
-        line(ctx, segment(CGPoint(x: 45.5, y: 18.5), CGPoint(x: 45.5, y: 36)), trim, width: 2)
-        line(ctx, segment(CGPoint(x: 56.5, y: 18.5), CGPoint(x: 56.5, y: 36)), trim, width: 2)
-        // 帽兜的水藍內裡，從脖子兩側露出來
-        shape(ctx, ellipse(50, 37, 32, 7), trim, lineWidth: 1.6)
-
-        if !raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
+    if parts.contains(.head) {
+        withState(ctx, head(p)) { drawHead(ctx, p) }
     }
 
-    withState(ctx, head(p)) { drawHead(ctx, p) }
+    if parts.contains(.top) {
+        // 胡蘿蔔在臉前面、手的後面，看起來像握在手裡
+        if p.carrot { withState(ctx, upper(p)) { drawCarrot(ctx, at: hand(shoulderFront, p.armFront)) } }
 
-    // 胡蘿蔔在臉前面、手的後面，看起來像握在手裡
-    if p.carrot { withState(ctx, upper(p)) { drawCarrot(ctx, at: hand(shoulderFront, p.armFront)) } }
+        // 舉高的手要畫在頭前面，不然會被大頭擋住
+        withState(ctx, upper(p)) {
+            if raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
+            if raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
+        }
 
-    // 舉高的手要畫在頭前面，不然會被大頭擋住
-    withState(ctx, upper(p)) {
-        if raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
-        if raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
-    }
-
-    // 睡覺的 z
-    for i in 0..<p.zzz {
-        drawZ(ctx, at: CGPoint(x: 74 + CGFloat(i) * 8, y: 66 + CGFloat(i) * 10), size: 6 + CGFloat(i) * 2)
+        // 睡覺的 z
+        for i in 0..<p.zzz {
+            drawZ(ctx, at: CGPoint(x: 74 + CGFloat(i) * 8, y: 66 + CGFloat(i) * 10), size: 6 + CGFloat(i) * 2)
+        }
     }
 }
 
 // MARK: - 背面（轉身時用）
 
-func drawBodyBack(_ ctx: CGContext, _ p: Pose) {
+func drawBodyBack(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
     let ut = upperTransform(p)
 
-    drawLeg(ctx, from: hipBack.applying(ut), to: CGPoint(x: footBack.x + p.backFoot.x, y: footBack.y + p.backFoot.y))
-    drawLeg(ctx, from: hipFront.applying(ut), to: CGPoint(x: footFront.x + p.frontFoot.x, y: footFront.y + p.frontFoot.y))
+    // 背對時長髮蓋在背上，所以全部畫在 head 層，hairBehind 層是空的。
+    if parts.contains(.base) {
+        drawLeg(ctx, from: hipBack.applying(ut), to: CGPoint(x: footBack.x + p.backFoot.x, y: footBack.y + p.backFoot.y))
+        drawLeg(ctx, from: hipFront.applying(ut), to: CGPoint(x: footFront.x + p.frontFoot.x, y: footFront.y + p.frontFoot.y))
 
-    withState(ctx, upper(p)) {
-        // 背面看得到垂下的手臂在身體兩側
-        if !raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
-        if !raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
-
-        // 百褶裙
-        let s = CGMutablePath()
-        s.move(to: CGPoint(x: 39, y: 28))
-        s.addLine(to: CGPoint(x: 61, y: 28))
-        s.addLine(to: CGPoint(x: 67, y: 14))
-        s.addQuadCurve(to: CGPoint(x: 50, y: 13), control: CGPoint(x: 58, y: 11))
-        s.addQuadCurve(to: CGPoint(x: 33, y: 14), control: CGPoint(x: 42, y: 11))
-        s.closeSubpath()
-        shape(ctx, s, skirt)
-        for (a, b) in [(CGPoint(x: 44, y: 20), CGPoint(x: 41, y: 14)),
-                       (CGPoint(x: 50, y: 20), CGPoint(x: 50, y: 14)),
-                       (CGPoint(x: 56, y: 20), CGPoint(x: 59, y: 14))] {
-            line(ctx, segment(a, b), skirtLight, width: 1.6)
+        withState(ctx, upper(p)) {
+            // 背面看得到垂下的手臂在身體兩側
+            if !raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
+            if !raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
+            look.clothes.torsoBack(ctx, p)
         }
-
-        // 外套背面一整片，上面披著帽兜
-        shape(ctx, rounded(34, 19, 32, 19, 6), jacket)
-        shape(ctx, ellipse(50, 33, 26, 11), jacket)
-        let lining = CGMutablePath()
-        lining.move(to: CGPoint(x: 40, y: 32))
-        lining.addQuadCurve(to: CGPoint(x: 60, y: 32), control: CGPoint(x: 50, y: 26))
-        line(ctx, lining, trim, width: 2)
-
-        // 圓圓的兔尾巴
-        shape(ctx, ellipse(50 + p.tail, 20, 10, 9), hair)
-        shape(ctx, ellipse(48.5 + p.tail, 21.5, 3.5, 2.5), hairShine, stroke: false)
     }
 
-    withState(ctx, head(p)) {
-        // 兔耳背面：沒有粉色內側
-        for (root, base, k) in [(CGPoint(x: 40, y: 72), CGFloat(0.3), CGFloat(1)),
-                                (CGPoint(x: 60, y: 72), CGFloat(-0.3), CGFloat(1))] {
-            withState(ctx, { c in
-                c.translateBy(x: root.x, y: root.y)
-                c.rotate(by: base + p.ears * k)
-            }) {
-                shape(ctx, ellipse(0, 13, 12, 28), hairDark)
+    if parts.contains(.head) {
+        // 圓圓的兔尾巴（跟頭髮同色）
+        withState(ctx, upper(p)) {
+            shape(ctx, ellipse(50 + p.tail, 20, 10, 9), look.hair.color)
+            shape(ctx, ellipse(48.5 + p.tail, 21.5, 3.5, 2.5), look.hair.shine, stroke: false)
+        }
+
+        withState(ctx, head(p)) {
+            // 兔耳背面：沒有粉色內側
+            for (root, base, k) in [(CGPoint(x: 40, y: 72), CGFloat(0.3), CGFloat(1)),
+                                    (CGPoint(x: 60, y: 72), CGFloat(-0.3), CGFloat(1))] {
+                withState(ctx, { c in
+                    c.translateBy(x: root.x, y: root.y)
+                    c.rotate(by: base + p.ears * k)
+                }) {
+                    shape(ctx, ellipse(0, 13, 12, 28), look.hair.dark)
+                }
             }
+            look.hair.backView(ctx, p)
         }
-        // 整顆後腦勺 + 兩側髮束
-        shape(ctx, petal(CGPoint(x: 29, y: 60), CGPoint(x: 31, y: 36), width: 7), hair, lineWidth: 1.8)
-        shape(ctx, petal(CGPoint(x: 71, y: 60), CGPoint(x: 69, y: 36), width: 7), hair, lineWidth: 1.8)
-        shape(ctx, ellipse(50, 57, 52, 46), hair)
-        // 髮流線條
-        for (end, ctrl) in [(CGPoint(x: 38, y: 38), CGPoint(x: 38, y: 62)),
-                            (CGPoint(x: 50, y: 35), CGPoint(x: 51, y: 60)),
-                            (CGPoint(x: 62, y: 38), CGPoint(x: 63, y: 62))] {
-            let strand = CGMutablePath()
-            strand.move(to: CGPoint(x: 50, y: 78))
-            strand.addQuadCurve(to: end, control: ctrl)
-            line(ctx, strand, hairDark, width: 1.4)
-        }
-        withState(ctx, { c in
-            c.translateBy(x: 41, y: 72)
-            c.rotate(by: 0.35)
-        }) {
-            shape(ctx, ellipse(0, 0, 14, 5), hairShine, stroke: false)
-        }
-        shape(ctx, ellipse(58, 75, 6, 2.6), hairShine, stroke: false)
     }
 
-    withState(ctx, upper(p)) {
-        if raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
-        if raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
+    if parts.contains(.top) {
+        withState(ctx, upper(p)) {
+            if raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
+            if raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
+        }
     }
 }
 
@@ -360,10 +319,19 @@ func drawCarrot(_ ctx: CGContext, at h: CGPoint) {
 }
 
 func drawLeg(_ ctx: CGContext, from hip: CGPoint, to foot: CGPoint) {
+    let c = look.clothes
     ctx.setLineCap(.round)
     line(ctx, segment(hip, foot), outline, width: 9)
-    line(ctx, segment(hip, foot), legging, width: 6.2)
-    shape(ctx, ellipse(foot.x + 1.5, foot.y - 0.5, 10, 6.5), shoe, lineWidth: 1.8)
+    line(ctx, segment(hip, foot), c.legging, width: 6.2)
+    // 短襪：腳踝上面一小段
+    if let sock = c.sock {
+        let len = max(hypot(hip.x - foot.x, hip.y - foot.y), 0.001)
+        let top = CGPoint(x: foot.x + (hip.x - foot.x) / len * 3.5, y: foot.y + (hip.y - foot.y) / len * 3.5)
+        line(ctx, segment(top, foot), sock, width: 6.2)
+    }
+    // 鞋底固定貼地，厚底鞋只往上長
+    let h = c.shoeHeight
+    shape(ctx, ellipse(foot.x + 1.5, foot.y - 0.5 + (h - 6.5) / 2, 10, h), c.shoe, lineWidth: 1.8)
 }
 
 func raised(_ angle: CGFloat) -> Bool { abs(angle) > 1.3 }
@@ -373,16 +341,18 @@ func hand(_ s: CGPoint, _ angle: CGFloat) -> CGPoint {
     CGPoint(x: s.x + sin(angle) * 12.5, y: s.y - cos(angle) * 12.5)
 }
 
-// 手臂：黑袖子 + 水藍袖口 + 白色圓手。角度 0 垂下，往前轉為正。
+// 手臂：袖子 + 袖口 + 白色圓手（顏色、袖子粗細看目前的服裝）。角度 0 垂下，往前轉為正。
 func drawArm(_ ctx: CGContext, _ s: CGPoint, _ angle: CGFloat) {
+    let c = look.clothes
+    let w = c.sleeveWidth
     let d = CGPoint(x: sin(angle), y: -cos(angle))
     func at(_ k: CGFloat) -> CGPoint { CGPoint(x: s.x + d.x * k, y: s.y + d.y * k) }
     ctx.setLineCap(.round)
-    line(ctx, segment(s, at(9)), outline, width: 9)
-    line(ctx, segment(s, at(9)), jacket, width: 6.6)
+    line(ctx, segment(s, at(9)), outline, width: w + 2.4)
+    line(ctx, segment(s, at(9)), c.sleeve, width: w)
     ctx.setLineCap(.butt)
-    line(ctx, segment(at(8), at(10)), outline, width: 9)
-    line(ctx, segment(at(8.4), at(9.6)), trim, width: 6.6)
+    line(ctx, segment(at(8), at(10)), outline, width: w + 2.4)
+    line(ctx, segment(at(8.4), at(9.6)), c.cuff, width: w)
     ctx.setLineCap(.round)
     let h = hand(s, angle)
     shape(ctx, ellipse(h.x, h.y, 7.5, 7.5), white, lineWidth: 1.8)
@@ -396,43 +366,19 @@ func drawHead(_ ctx: CGContext, _ p: Pose) {
             c.translateBy(x: root.x, y: root.y)
             c.rotate(by: base + p.ears * k)
         }) {
-            shape(ctx, ellipse(0, 13, 12, 28), hair)
+            shape(ctx, ellipse(0, 13, 12, 28), look.hair.color)
             shape(ctx, ellipse(0.5, 14, 5.5, 19), earInner, stroke: false)
         }
     }
 
-    // 後腦的頭髮
-    shape(ctx, ellipse(50, 58, 54, 46), hairDark)
+    // 後腦的頭髮（在臉後面）
+    look.hair.backOfHead(ctx, p)
 
     // 臉
     shape(ctx, ellipse(54, 51, 40, 32), skin)
 
-    // 兩側垂下的髮束
-    shape(ctx, petal(CGPoint(x: 31, y: 62), CGPoint(x: 31, y: 37), width: 7), hair, lineWidth: 1.8)
-    shape(ctx, petal(CGPoint(x: 76, y: 60), CGPoint(x: 74, y: 38), width: 6), hair, lineWidth: 1.8)
-
-    // 瀏海：上緣是圓頂，下緣是一排尖尖的髮梢
-    let bangs = CGMutablePath()
-    bangs.move(to: CGPoint(x: 27, y: 54))
-    bangs.addCurve(to: CGPoint(x: 78, y: 56), control1: CGPoint(x: 26, y: 86), control2: CGPoint(x: 78, y: 86))
-    // 注意：addLines(between:) 會另起新的子路徑，所以這裡逐點 addLine 接在圓頂後面
-    for pt in [CGPoint(x: 72, y: 61), CGPoint(x: 68, y: 56.5),
-                             CGPoint(x: 63, y: 62), CGPoint(x: 57.5, y: 56), CGPoint(x: 52.5, y: 62.5),
-                             CGPoint(x: 47, y: 56.5), CGPoint(x: 41.5, y: 62), CGPoint(x: 36, y: 55.5),
-                             CGPoint(x: 32, y: 60)] {
-        bangs.addLine(to: pt)
-    }
-    bangs.closeSubpath()
-    shape(ctx, bangs, hair)
-
-    // 頭髮上的水藍光澤
-    withState(ctx, { c in
-        c.translateBy(x: 41, y: 74)
-        c.rotate(by: 0.35)
-    }) {
-        shape(ctx, ellipse(0, 0, 14, 5), hairShine, stroke: false)
-    }
-    shape(ctx, ellipse(57, 77.5, 6, 2.6), hairShine, stroke: false)
+    // 臉前面的頭髮：兩側髮束、瀏海、光澤
+    look.hair.front(ctx, p)
 
     // 臉頰
     shape(ctx, ellipse(40, 44, 7, 3.6), cheek, stroke: false)
@@ -1080,6 +1026,617 @@ let outfits: [Outfit] = [
     },
 ]
 
+// MARK: - 外觀：髮型與服裝（純外觀，不加戰鬥力）
+//
+// 跟上面的「服裝」不同，這裡換的是她本人的頭髮和衣服，所以畫在本體的圖層裡（見 BodyPart）。
+// 髮型只管 hairBehind / head 層，服裝只管 base / top 層，兩者可以任意搭配。
+
+typealias Draw = (CGContext, Pose) -> Void
+
+struct HairStyle {
+    let id: String
+    let name: String
+    let color: CGColor      // 主色：兔耳、兔尾巴也用這個
+    let dark: CGColor       // 暗色：後腦、兔耳背面
+    let shine: CGColor      // 光澤
+    var behind: Draw = { _, _ in }   // 垂在身體後面的長髮（頭的座標系）
+    let backOfHead: Draw    // 臉後面的頭髮
+    let front: Draw         // 臉前面的頭髮：兩側、瀏海、光澤、髮飾
+    let backView: Draw      // 背對畫面時的後腦（兔耳已經先畫好了）
+}
+
+struct ClothesStyle {
+    let id: String
+    let name: String
+    let sleeve: CGColor
+    let cuff: CGColor
+    var sleeveWidth: CGFloat = 6.6
+    let legging: CGColor
+    var sock: CGColor? = nil
+    let shoe: CGColor
+    var shoeHeight: CGFloat = 6.5    // 大於 6.5 是厚底鞋
+    let torso: Draw         // 正面的衣服（上半身座標系）
+    let torsoBack: Draw     // 背面的衣服
+}
+
+struct Look {
+    var hair: HairStyle
+    var clothes: ClothesStyle
+}
+
+// 瀏海：上緣是跟阿米婭一樣的圓頂（帽子才戴得上），下緣用 tips 決定髮梢形狀。
+func bangsPath(_ tips: [CGPoint]) -> CGPath {
+    let bangs = CGMutablePath()
+    bangs.move(to: CGPoint(x: 27, y: 54))
+    bangs.addCurve(to: CGPoint(x: 78, y: 56), control1: CGPoint(x: 26, y: 86), control2: CGPoint(x: 78, y: 86))
+    // 注意：addLines(between:) 會另起新的子路徑，所以這裡逐點 addLine 接在圓頂後面
+    for pt in tips { bangs.addLine(to: pt) }
+    bangs.closeSubpath()
+    return bangs
+}
+
+// 頭頂的兩道光澤。
+// 正面在 y 74，背面（back: true）稍微低一點。
+func hairGloss(_ ctx: CGContext, _ color: CGColor, back: Bool = false) {
+    withState(ctx, { c in
+        c.translateBy(x: 41, y: back ? 72 : 74)
+        c.rotate(by: 0.35)
+    }) {
+        shape(ctx, ellipse(0, 0, 14, 5), color, stroke: false)
+    }
+    shape(ctx, back ? ellipse(58, 75, 6, 2.6) : ellipse(57, 77.5, 6, 2.6), color, stroke: false)
+}
+
+// 在 clip 形狀裡畫東西（例如瀏海裡的挑染）。
+func clipped(_ ctx: CGContext, to path: CGPath, _ draw: () -> Void) {
+    ctx.saveGState()
+    ctx.addPath(path)
+    ctx.clip()
+    draw()
+    ctx.restoreGState()
+}
+
+func quad(_ a: CGPoint, _ b: CGPoint, _ control: CGPoint) -> CGPath {
+    let p = CGMutablePath()
+    p.move(to: a)
+    p.addQuadCurve(to: b, control: control)
+    return p
+}
+
+func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
+
+func lerp(_ a: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
+    CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+}
+
+// 蝴蝶結：兩片三角形 + 中間的結。
+func drawBow(_ ctx: CGContext, at c: CGPoint, size s: CGFloat, _ color: CGColor, knot: CGColor? = nil) {
+    shape(ctx, polygon([c, pt(c.x - s * 1.6, c.y + s), pt(c.x - s * 1.6, c.y - s)]), color, lineWidth: 1.4)
+    shape(ctx, polygon([c, pt(c.x + s * 1.6, c.y + s), pt(c.x + s * 1.6, c.y - s)]), color, lineWidth: 1.4)
+    shape(ctx, ellipse(c.x, c.y, s * 0.95, s * 0.95), knot ?? color, lineWidth: 1.4)
+}
+
+// ── 髮型 ──
+
+let amiyaHair = HairStyle(
+    id: "amiya", name: "阿米婭", color: hair, dark: hairDark, shine: hairShine,
+    backOfHead: { ctx, _ in
+        shape(ctx, ellipse(50, 58, 54, 46), hairDark)
+    },
+    front: { ctx, _ in
+        // 兩側垂下的髮束
+        shape(ctx, petal(pt(31, 62), pt(31, 37), width: 7), hair, lineWidth: 1.8)
+        shape(ctx, petal(pt(76, 60), pt(74, 38), width: 6), hair, lineWidth: 1.8)
+        // 瀏海：下緣是一排尖尖的髮梢
+        shape(ctx, bangsPath([pt(72, 61), pt(68, 56.5), pt(63, 62), pt(57.5, 56), pt(52.5, 62.5),
+                              pt(47, 56.5), pt(41.5, 62), pt(36, 55.5), pt(32, 60)]), hair)
+        // 頭髮上的水藍光澤
+        hairGloss(ctx, hairShine)
+    },
+    backView: { ctx, _ in
+        // 整顆後腦勺 + 兩側髮束
+        shape(ctx, petal(pt(29, 60), pt(31, 36), width: 7), hair, lineWidth: 1.8)
+        shape(ctx, petal(pt(71, 60), pt(69, 36), width: 7), hair, lineWidth: 1.8)
+        shape(ctx, ellipse(50, 57, 52, 46), hair)
+        // 髮流線條
+        for (end, ctrl) in [(pt(38, 38), pt(38, 62)), (pt(50, 35), pt(51, 60)), (pt(62, 38), pt(63, 62))] {
+            line(ctx, quad(pt(50, 78), end, ctrl), hairDark, width: 1.4)
+        }
+        hairGloss(ctx, hairShine, back: true)
+    }
+)
+
+// ── 髮型用的小工具 ──
+
+// 一束頭髮：沿著三次貝茲曲線（p0 → p3）長出來，width(t) 決定每一段的寬度（t 從 0 到 1）。
+// 用來畫雙馬尾、長髮、髮尾這種有 S 形弧度、慢慢收尖的髮束。
+func hairStrand(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint,
+                width: (CGFloat) -> CGFloat, samples: Int = 28) -> CGPath {
+    func at(_ t: CGFloat) -> CGPoint {
+        let u = 1 - t
+        return CGPoint(x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
+                       y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y)
+    }
+    var left: [CGPoint] = [], right: [CGPoint] = []
+    for i in 0...samples {
+        let t = CGFloat(i) / CGFloat(samples)
+        let a = at(max(0, t - 0.01)), b = at(min(1, t + 0.01)), c = at(t)
+        let len = max(hypot(b.x - a.x, b.y - a.y), 0.0001)
+        let n = CGPoint(x: -(b.y - a.y) / len, y: (b.x - a.x) / len)
+        let w = width(t) / 2
+        left.append(CGPoint(x: c.x + n.x * w, y: c.y + n.y * w))
+        right.append(CGPoint(x: c.x - n.x * w, y: c.y - n.y * w))
+    }
+    let path = CGMutablePath()
+    path.move(to: left[0])
+    for q in left.dropFirst() { path.addLine(to: q) }
+    for q in right.reversed() { path.addLine(to: q) }
+    path.closeSubpath()
+    return path
+}
+
+// 常用的寬度變化：根部 w0，中段稍微鼓起來，尾端收到 tip。
+func taper(_ w0: CGFloat, belly: CGFloat = 0.3, tip: CGFloat = 1.2) -> (CGFloat) -> CGFloat {
+    { t in max(tip, w0 * (1 + belly * sin(.pi * t)) * (1 - 0.9 * pow(t, 1.6))) }
+}
+
+// 天使光環：黑髮頭頂那一圈亮亮的反光（畫在 clip 形狀裡，不會超出頭髮）。
+func angelRing(_ ctx: CGContext, in shapePath: CGPath, _ color: CGColor, y: CGFloat = 70) {
+    clipped(ctx, to: shapePath) {
+        // 一段一段的短反光，中間斷開，才不會像髮箍
+        ctx.saveGState()
+        ctx.setLineCap(.round)
+        ctx.setLineDash(phase: 0, lengths: [5.5, 2.6, 3.5, 2.6, 7, 2.6])
+        line(ctx, quad(pt(31, y - 2), pt(74, y), pt(52, y + 8)), color.copy(alpha: 0.85)!, width: 2.2)
+        ctx.restoreGState()
+        shape(ctx, ellipse(41, y + 4.6, 4, 1.6), hex(0xFFFFFF, 0.8), stroke: false)
+    }
+}
+
+// 兩圈圓圓的蝴蝶結 + 兩條垂下的緞帶，比三角形的可愛。
+func loopBow(_ ctx: CGContext, at c: CGPoint, size s: CGFloat, _ color: CGColor, _ fold: CGColor, tails: Bool = true) {
+    if tails {
+        shape(ctx, petal(pt(c.x - 0.5, c.y - 0.5), pt(c.x - s * 0.7, c.y - s * 1.7), width: s * 0.55), color, lineWidth: 1.2)
+        shape(ctx, petal(pt(c.x + 0.5, c.y - 0.5), pt(c.x + s * 0.8, c.y - s * 1.6), width: s * 0.55), color, lineWidth: 1.2)
+    }
+    for dir in [CGFloat(-1), 1] {
+        withState(ctx, { g in
+            g.translateBy(x: c.x + dir * s * 0.85, y: c.y + 0.3)
+            g.rotate(by: dir * 0.25)
+        }) {
+            shape(ctx, ellipse(0, 0, s * 1.7, s * 1.25), color, lineWidth: 1.3)
+            shape(ctx, ellipse(-dir * s * 0.35, 0, s * 0.6, s * 0.45), fold, stroke: false)
+        }
+    }
+    shape(ctx, ellipse(c.x, c.y, s * 0.7, s * 0.8), fold, lineWidth: 1.2)
+}
+
+// 臉旁內彎的側髮（跟鮑伯同一種畫法）：從 top 往下到 bottom，尾端往臉內側收。
+// side = -1 是後面那側（畫面左邊），1 是臉那側（畫面右邊）。
+func sideLock(_ ctx: CGContext, side: CGFloat, top: CGFloat = 62, bottom: CGFloat, width w: CGFloat,
+              _ color: CGColor, curl: CGFloat = 1) {
+    let x0: CGFloat = side < 0 ? 27 : 79
+    let inward: CGFloat = side < 0 ? 1 : -1
+    let p = CGMutablePath()
+    p.move(to: pt(x0, top))
+    p.addQuadCurve(to: pt(x0 + inward * 1.5, bottom), control: pt(x0 - inward * 3, (top + bottom) / 2))
+    p.addQuadCurve(to: pt(x0 + inward * (w + 1.5 * curl), bottom + 2.5 * curl), control: pt(x0 + inward * w * 0.6, bottom - 2.5 * curl))
+    p.addQuadCurve(to: pt(x0 + inward * w, top - 2), control: pt(x0 + inward * (w - 1), (top + bottom) / 2))
+    p.closeSubpath()
+    shape(ctx, p, color, lineWidth: 1.7)
+}
+
+// 地雷系雙馬尾：黑髮、髮尾漸層成粉紅（裾カラー），S 形的軟軟長馬尾，綁粉紅緞帶蝴蝶結，頭頂有天使光環。
+func jiraiTwinTails() -> HairStyle {
+    let base = hex(0x2A2530), dark = hex(0x1A161F), shine = hex(0xD8C6F2)
+    let pink = hex(0xFFB3D1), pinkMid = hex(0xE98AB5), ribbon = hex(0xF27AA6), ribbonFold = hex(0xD24F82)
+    // 一條馬尾：side -1 左、1 右；rootX 是綁的位置
+    func tail(_ ctx: CGContext, side: CGFloat, rootX: CGFloat, rootY: CGFloat) {
+        let s = side
+        let p0 = pt(rootX, rootY), p1 = pt(rootX + s * 14, rootY - 8)
+        let p2 = pt(rootX + s * 2, rootY - 30), p3 = pt(rootX + s * 12, rootY - 47)
+        let path = hairStrand(p0, p1, p2, p3, width: taper(12, belly: 0.35, tip: 1.6))
+        shape(ctx, path, base)
+        // 髮尾漸層成粉紅
+        clipped(ctx, to: path) {
+            let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                               colors: [base, base, pinkMid, pink] as CFArray, locations: [0, 0.5, 0.72, 1])!
+            ctx.drawLinearGradient(g, start: p0, end: p3, options: [.drawsAfterEndLocation])
+        }
+        ctx.addPath(path)
+        ctx.setStrokeColor(outline)
+        ctx.setLineWidth(2)
+        ctx.strokePath()
+        // 髮流
+        let flow = CGMutablePath()
+        flow.move(to: pt(rootX + s * 3, rootY - 4))
+        flow.addCurve(to: pt(rootX + s * 9, rootY - 36), control1: pt(rootX + s * 12, rootY - 12), control2: pt(rootX - s * 1, rootY - 24))
+        line(ctx, flow, hex(0xFFFFFF, 0.18), width: 1.4)
+    }
+    let bangs = bangsPath([pt(76, 57.5), pt(71, 59.3), pt(66, 57.6), pt(61, 59.6), pt(56, 57.7), pt(51, 59.8),
+                           pt(46, 57.7), pt(41, 59.5), pt(36, 57.6), pt(31, 58.8), pt(28.5, 57)])
+    return HairStyle(
+        id: "jirai_twintails", name: "地雷系雙馬尾", color: base, dark: dark, shine: shine,
+        behind: { ctx, _ in
+            tail(ctx, side: -1, rootX: 25, rootY: 68)
+            tail(ctx, side: 1, rootX: 80, rootY: 67)
+        },
+        backOfHead: { ctx, _ in shape(ctx, ellipse(51, 57, 56, 46), dark) },
+        front: { ctx, _ in
+            sideLock(ctx, side: -1, bottom: 37, width: 8, base)
+            sideLock(ctx, side: 1, top: 60, bottom: 38, width: 7, base)
+            shape(ctx, bangs, base)
+            angelRing(ctx, in: bangs, shine)
+            loopBow(ctx, at: pt(25, 69), size: 4.6, ribbon, ribbonFold)
+            loopBow(ctx, at: pt(80, 68), size: 4.6, ribbon, ribbonFold)
+        },
+        backView: { ctx, _ in
+            tail(ctx, side: -1, rootX: 29, rootY: 67)
+            tail(ctx, side: 1, rootX: 71, rootY: 67)
+            let head = ellipse(50, 57, 54, 46)
+            shape(ctx, head, base)
+            for (end, ctrl) in [(pt(40, 37), pt(39, 62)), (pt(60, 37), pt(61, 62))] {
+                line(ctx, quad(pt(50, 78), end, ctrl), dark, width: 1.3)
+            }
+            angelRing(ctx, in: head, shine, y: 68)
+            loopBow(ctx, at: pt(29, 68), size: 4.6, ribbon, ribbonFold)
+            loopBow(ctx, at: pt(71, 68), size: 4.6, ribbon, ribbonFold)
+        }
+    )
+}
+
+// 日系鯔魚頭（狼尾）：頭頂圓圓的有層次、空氣感碎瀏海、臉旁的髮尾輕輕往外翹，
+// 後頸留兩三束細長的髮尾垂到肩膀。accent 是後頸髮尾的顏色（跟主色不同就是內層挑染）。
+func wolfMullet(id: String, name: String, base: CGColor, dark: CGColor, shine: CGColor, accent: CGColor,
+                ring: Bool = false) -> HairStyle {
+    // 臉旁往外翹的一片：從太陽穴往下，到臉頰往外撇
+    func flick(_ ctx: CGContext, side: CGFloat, _ color: CGColor) {
+        let x0: CGFloat = side < 0 ? 29 : 77
+        let o = side   // 往外 = side 方向
+        let p = CGMutablePath()
+        p.move(to: pt(x0 - o * 1, 63))
+        p.addQuadCurve(to: pt(x0 + o * 1, 44), control: pt(x0 + o * 4, 54))
+        p.addQuadCurve(to: pt(x0 + o * 7, 37), control: pt(x0 + o * 2, 39))       // 髮尾往外撇
+        p.addQuadCurve(to: pt(x0 - o * 5, 43), control: pt(x0 - o * 1, 39))
+        p.addQuadCurve(to: pt(x0 - o * 6, 61), control: pt(x0 - o * 4, 52))
+        p.closeSubpath()
+        shape(ctx, p, color, lineWidth: 1.7)
+    }
+    func nape(_ ctx: CGContext, xs: [(CGFloat, CGFloat)], top: CGFloat) {
+        // (根部 x, 往外的方向)
+        for (x, o) in xs {
+            let path = hairStrand(pt(x, top), pt(x + o * 2, top - 9), pt(x - o * 1, top - 17), pt(x + o * 7, top - 25),
+                                  width: taper(8, belly: 0.15, tip: 1.4))
+            shape(ctx, path, accent, lineWidth: 1.7)
+        }
+    }
+    let bangs = bangsPath([pt(76, 59), pt(72.5, 56), pt(69, 61), pt(64.5, 56.5), pt(60.5, 62.5), pt(56, 56.8),
+                           pt(51.5, 61.5), pt(47, 56.5), pt(42.5, 62), pt(38, 56.8), pt(34, 60.5), pt(30, 56.5)])
+    return HairStyle(
+        id: id, name: name, color: base, dark: dark, shine: shine,
+        behind: { ctx, _ in nape(ctx, xs: [(35, -1), (41, -0.5), (63, 0.5), (69, 1)], top: 46) },
+        backOfHead: { ctx, _ in shape(ctx, ellipse(51, 57, 56, 46), dark) },
+        front: { ctx, _ in
+            flick(ctx, side: -1, base)
+            flick(ctx, side: 1, base)
+            shape(ctx, bangs, base)
+            clipped(ctx, to: bangs) {
+                for (a, b, c) in [(pt(47, 82), pt(44.5, 57), pt(49, 68)), (pt(59, 82), pt(60, 58), pt(61.5, 70))] {
+                    line(ctx, quad(a, b, c), dark, width: 1.1)
+                }
+            }
+            if ring { angelRing(ctx, in: bangs, shine) } else { hairGloss(ctx, shine) }
+        },
+        backView: { ctx, _ in
+            nape(ctx, xs: [(38, -1), (45, -0.4), (55, 0.4), (62, 1)], top: 46)
+            let head = ellipse(50, 58, 54, 44)
+            shape(ctx, head, base)
+            for (end, ctrl) in [(pt(39, 40), pt(38, 62)), (pt(50, 37), pt(51, 60)), (pt(61, 40), pt(63, 62))] {
+                line(ctx, quad(pt(50, 78), end, ctrl), dark, width: 1.2)
+            }
+            if ring { angelRing(ctx, in: head, shine, y: 68) } else { hairGloss(ctx, shine, back: true) }
+        }
+    )
+}
+
+// 日系公主切：黑長直，頭頂天使光環，齊瀏海的轉角是圓的，臉旁的姬髮到下巴剪齊、微微內彎，
+// 後面的長髮垂到腰、髮尾圓圓的。
+func himeCut() -> HairStyle {
+    let base = hex(0x25212C), dark = hex(0x16131B), shine = hex(0xC9D4F0)
+    let bangs = bangsPath([pt(77, 58), pt(70.5, 57.3), pt(69, 58.3), pt(60.5, 57.3), pt(59, 58.3), pt(49.5, 57.3),
+                           pt(48, 58.3), pt(39.5, 57.3), pt(38, 58.3), pt(29, 58)])
+    // 姬髮：直直往下，到下巴剪齊，轉角圓圓的
+    func himeLock(_ ctx: CGContext, x0: CGFloat, x1: CGFloat, top: CGFloat, bottom: CGFloat) {
+        let p = CGMutablePath()
+        p.move(to: pt(x0, top))
+        p.addQuadCurve(to: pt(x0 + 0.5, bottom + 2), control: pt(x0 - 1.5, (top + bottom) / 2))
+        p.addQuadCurve(to: pt(x0 + 2.5, bottom), control: pt(x0 + 0.5, bottom))
+        p.addLine(to: pt(x1 - 2, bottom + 0.6))
+        p.addQuadCurve(to: pt(x1, bottom + 2.5), control: pt(x1, bottom + 0.6))
+        p.addQuadCurve(to: pt(x1, top - 1), control: pt(x1 + 0.5, (top + bottom) / 2))
+        p.closeSubpath()
+        shape(ctx, p, base, lineWidth: 1.7)
+    }
+    // 垂到腰的長髮：一大片，髮尾微彎、圓角
+    func longHair(_ ctx: CGContext, left: CGFloat, right: CGFloat, top: CGFloat, bottom: CGFloat) {
+        let p = CGMutablePath()
+        p.move(to: pt(left + 3, top))
+        p.addQuadCurve(to: pt(left, bottom + 4), control: pt(left - 3, (top + bottom) / 2))
+        p.addQuadCurve(to: pt(left + 5, bottom), control: pt(left, bottom))
+        p.addQuadCurve(to: pt(right - 5, bottom), control: pt((left + right) / 2, bottom - 2.5))
+        p.addQuadCurve(to: pt(right, bottom + 4), control: pt(right, bottom))
+        p.addQuadCurve(to: pt(right - 3, top), control: pt(right + 3, (top + bottom) / 2))
+        p.closeSubpath()
+        shape(ctx, p, base)
+        clipped(ctx, to: p) {
+            for k in stride(from: left + 9, through: right - 8, by: 10) {
+                line(ctx, quad(pt(k, top - 2), pt(k + (k < (left + right) / 2 ? -1.5 : 1.5), bottom + 1), pt(k + 1, (top + bottom) / 2)),
+                     dark, width: 1.1)
+            }
+        }
+    }
+    return HairStyle(
+        id: "hime_cut", name: "日系公主切", color: base, dark: dark, shine: shine,
+        behind: { ctx, _ in longHair(ctx, left: 22, right: 81, top: 62, bottom: 16) },
+        backOfHead: { ctx, _ in shape(ctx, ellipse(51, 57, 56, 46), dark) },
+        front: { ctx, _ in
+            himeLock(ctx, x0: 26.5, x1: 35, top: 62, bottom: 38)
+            himeLock(ctx, x0: 71.5, x1: 78.5, top: 60, bottom: 39)
+            shape(ctx, bangs, base)
+            angelRing(ctx, in: bangs, shine)
+        },
+        backView: { ctx, _ in
+            longHair(ctx, left: 30, right: 70, top: 66, bottom: 21)
+            let head = ellipse(50, 57, 54, 46)
+            shape(ctx, head, base)
+            angelRing(ctx, in: head, shine, y: 68)
+        }
+    )
+}
+
+// 日系短鮑伯：粉霧棕、透明感的空氣瀏海，髮尾在下巴內彎。
+func shortBob() -> HairStyle {
+    let base = hex(0xB98A86), dark = hex(0x94655F), shine = hex(0xF7D9D6)
+    return HairStyle(
+        id: "short_bob", name: "日系短鮑伯", color: base, dark: dark, shine: shine,
+        backOfHead: { ctx, _ in shape(ctx, ellipse(51, 54, 58, 48), dark) },
+        front: { ctx, _ in
+            // 兩側內彎的鮑伯
+            let back = CGMutablePath()
+            back.move(to: pt(26, 60))
+            back.addQuadCurve(to: pt(30, 34), control: pt(21, 45))
+            back.addQuadCurve(to: pt(39, 37), control: pt(34, 31))
+            back.addQuadCurve(to: pt(36, 60), control: pt(33, 47))
+            back.closeSubpath()
+            shape(ctx, back, base, lineWidth: 1.8)
+            let front = CGMutablePath()
+            front.move(to: pt(80, 58))
+            front.addQuadCurve(to: pt(76, 35), control: pt(84, 45))
+            front.addQuadCurve(to: pt(69, 37), control: pt(73, 32))
+            front.addQuadCurve(to: pt(72, 58), control: pt(73, 47))
+            front.closeSubpath()
+            shape(ctx, front, base, lineWidth: 1.8)
+            // 空氣瀏海：細細的髮梢，看得到額頭
+            shape(ctx, bangsPath([pt(76, 59), pt(72, 60), pt(69, 57), pt(65, 62), pt(61, 58), pt(57, 63),
+                                  pt(53, 58), pt(49, 62.5), pt(45, 58), pt(41, 62), pt(37, 57.5), pt(33, 60.5), pt(30, 57)]), base)
+            hairGloss(ctx, shine)
+        },
+        backView: { ctx, _ in
+            shape(ctx, ellipse(50, 55, 56, 48), base)
+            line(ctx, quad(pt(27, 40), pt(73, 40), pt(50, 29)), dark, width: 1.6)
+            for (end, ctrl) in [(pt(40, 36), pt(39, 60)), (pt(60, 36), pt(61, 60))] {
+                line(ctx, quad(pt(50, 78), end, ctrl), dark, width: 1.3)
+            }
+            hairGloss(ctx, shine, back: true)
+        }
+    )
+}
+
+let hairStyles: [HairStyle] = [
+    amiyaHair,
+    jiraiTwinTails(),
+    wolfMullet(id: "wolf_milktea", name: "日系鯔魚頭・奶茶", base: hex(0xC9A07E), dark: hex(0xA57D5E),
+               shine: hex(0xF5E2C8), accent: hex(0xC9A07E)),
+    wolfMullet(id: "wolf_silver", name: "日系鯔魚頭・黑銀挑染", base: hex(0x2E2A33), dark: hex(0x1D1A21),
+               shine: hex(0xD9DEE8), accent: hex(0xC4CBD8), ring: true),
+    himeCut(),
+    shortBob(),
+]
+
+// ── 服裝 ──
+
+// 阿米婭原本的百褶裙（正面、背面的褶線位置不同）。
+func pleatedSkirt(_ ctx: CGContext, _ color: CGColor, _ pleat: CGColor, back: Bool) {
+    let s = CGMutablePath()
+    s.move(to: pt(39, 28))
+    s.addLine(to: pt(61, 28))
+    s.addLine(to: pt(67, 14))
+    s.addQuadCurve(to: pt(50, 13), control: pt(58, 11))
+    s.addQuadCurve(to: pt(33, 14), control: pt(42, 11))
+    s.closeSubpath()
+    shape(ctx, s, color)
+    let pleats = back
+        ? [(pt(44, 20), pt(41, 14)), (pt(50, 20), pt(50, 14)), (pt(56, 20), pt(59, 14))]
+        : [(pt(44, 27), pt(40, 14)), (pt(50, 27), pt(50, 14)), (pt(56, 27), pt(60, 14))]
+    for (a, b) in pleats { line(ctx, segment(a, b), pleat, width: 1.6) }
+}
+
+let amiyaClothes = ClothesStyle(
+    id: "amiya", name: "阿米婭", sleeve: jacket, cuff: trim, legging: legging, shoe: shoe,
+    torso: { ctx, _ in
+        pleatedSkirt(ctx, skirt, skirtLight, back: false)
+        // 深藍上衣，下襬是一排小荷葉邊
+        shape(ctx, rounded(44, 25, 14, 13, 3), top, lineWidth: 1.6)
+        for x in stride(from: CGFloat(46.5), through: 56, by: 4.5) {
+            shape(ctx, ellipse(x, 25, 5, 4), top, lineWidth: 1.2)
+        }
+        // 敞開的黑外套：左右兩片，內側水藍滾邊
+        shape(ctx, rounded(33.5, 17, 13, 21, 5), jacket)
+        shape(ctx, rounded(55.5, 17, 10, 21, 5), jacket)
+        line(ctx, segment(pt(45.5, 18.5), pt(45.5, 36)), trim, width: 2)
+        line(ctx, segment(pt(56.5, 18.5), pt(56.5, 36)), trim, width: 2)
+        // 帽兜的水藍內裡，從脖子兩側露出來
+        shape(ctx, ellipse(50, 37, 32, 7), trim, lineWidth: 1.6)
+    },
+    torsoBack: { ctx, _ in
+        pleatedSkirt(ctx, skirt, skirtLight, back: true)
+        // 外套背面一整片，上面披著帽兜
+        shape(ctx, rounded(34, 19, 32, 19, 6), jacket)
+        shape(ctx, ellipse(50, 33, 26, 11), jacket)
+        line(ctx, quad(pt(40, 32), pt(60, 32), pt(50, 26)), trim, width: 2)
+    }
+)
+
+// 荷葉邊裙 + 大圓領 + 胸前蝴蝶結：地雷系、量產型共用，只換顏色。
+func frillyDress(id: String, name: String, blouse: CGColor, skirt: CGColor, lace: CGColor, collar: CGColor,
+                 ribbon: CGColor, sleeve: CGColor, cuff: CGColor, legging: CGColor, sock: CGColor?, shoe: CGColor) -> ClothesStyle {
+    func skirtShape(_ ctx: CGContext) {
+        // 裙襬下露出一圈蕾絲
+        for x in stride(from: CGFloat(33.5), through: 67, by: 4.1) {
+            shape(ctx, ellipse(x, 13, 5, 4), lace, lineWidth: 1.1)
+        }
+        let s = CGMutablePath()
+        s.move(to: pt(38, 27))
+        s.addLine(to: pt(62, 27))
+        s.addLine(to: pt(68, 14.5))
+        s.addQuadCurve(to: pt(50, 13), control: pt(58, 12))
+        s.addQuadCurve(to: pt(32, 14.5), control: pt(42, 12))
+        s.closeSubpath()
+        shape(ctx, s, skirt)
+        let trimLine = CGMutablePath()
+        trimLine.move(to: pt(33.5, 16))
+        trimLine.addQuadCurve(to: pt(50, 14.6), control: pt(42, 13.6))
+        trimLine.addQuadCurve(to: pt(66.5, 16), control: pt(58, 13.6))
+        line(ctx, trimLine, ribbon, width: 1.3)
+    }
+    return ClothesStyle(
+        id: id, name: name, sleeve: sleeve, cuff: cuff, legging: legging, sock: sock, shoe: shoe, shoeHeight: 8.5,
+        torso: { ctx, _ in
+            skirtShape(ctx)
+            shape(ctx, rounded(36, 24, 28, 15, 5), blouse)
+            line(ctx, segment(pt(37.5, 26), pt(62.5, 26)), ribbon, width: 2)   // 腰帶
+            // 大圓領 + 胸前蝴蝶結（緞帶垂下來）
+            shape(ctx, ellipse(43.5, 36, 15, 7), collar, lineWidth: 1.4)
+            shape(ctx, ellipse(58, 36, 15, 7), collar, lineWidth: 1.4)
+            shape(ctx, petal(pt(49.5, 32), pt(46.5, 24.5), width: 3), ribbon, lineWidth: 1.2)
+            shape(ctx, petal(pt(52.5, 32), pt(55.5, 24.5), width: 3), ribbon, lineWidth: 1.2)
+            drawBow(ctx, at: pt(51, 33), size: 4.2, ribbon)
+        },
+        torsoBack: { ctx, _ in
+            skirtShape(ctx)
+            shape(ctx, rounded(34, 19, 32, 20, 6), blouse)
+            shape(ctx, ellipse(50, 36, 28, 8), collar, lineWidth: 1.4)
+            drawBow(ctx, at: pt(50, 24), size: 5.5, ribbon)   // 背後腰上的大蝴蝶結
+        }
+    )
+}
+
+let jiraiClothes = frillyDress(
+    id: "jirai", name: "地雷系", blouse: hex(0x231E27), skirt: hex(0x231E27), lace: white, collar: white,
+    ribbon: hex(0xF26B9C), sleeve: hex(0x231E27), cuff: white, legging: hex(0x1E1A22), sock: white, shoe: hex(0x18151C))
+
+let ryousanClothes = frillyDress(
+    id: "ryousan", name: "量產型", blouse: hex(0xFFF4F7), skirt: hex(0xF4B6CB), lace: white, collar: white,
+    ribbon: hex(0xE0607E), sleeve: hex(0xFFF4F7), cuff: hex(0xF4B6CB), legging: hex(0xFBF3F6), sock: nil, shoe: hex(0xE68AA8))
+
+// 日系水手服：白上衣、深藍水手領、紅領巾、深藍百褶裙、樂福鞋。
+let sailorClothes: ClothesStyle = {
+    let navy = hex(0x22305E), navyLight = hex(0x3B4C86), shirt = hex(0xF8F9FC), red = hex(0xD8343F)
+    return ClothesStyle(
+        id: "sailor", name: "日系水手服", sleeve: shirt, cuff: navy, legging: hex(0x23243A), shoe: hex(0x5A3A2A),
+        torso: { ctx, _ in
+            pleatedSkirt(ctx, navy, navyLight, back: false)
+            shape(ctx, rounded(36, 22, 28, 17, 5), shirt)
+            // V 字水手領 + 白色滾線
+            shape(ctx, polygon([pt(35, 39.5), pt(66, 39.5), pt(64, 33), pt(51, 25.5), pt(37.5, 33)]), navy, lineWidth: 1.6)
+            let stripe = CGMutablePath()
+            stripe.addLines(between: [pt(39.5, 34), pt(51, 28), pt(62, 34)])
+            line(ctx, stripe, shirt, width: 1.2)
+            shape(ctx, polygon([pt(44, 39.5), pt(58, 39.5), pt(51, 30)]), shirt, lineWidth: 1.2)
+            // 紅領巾
+            shape(ctx, petal(pt(50, 29), pt(47.5, 21), width: 3.5), red, lineWidth: 1.2)
+            shape(ctx, petal(pt(52, 29), pt(54.5, 21), width: 3.5), red, lineWidth: 1.2)
+            drawBow(ctx, at: pt(51, 30), size: 3.8, red)
+        },
+        torsoBack: { ctx, _ in
+            pleatedSkirt(ctx, navy, navyLight, back: true)
+            shape(ctx, rounded(34, 19, 32, 20, 6), shirt)
+            // 背後方方的水手領
+            shape(ctx, rounded(36, 27, 28, 13, 2), navy, lineWidth: 1.6)
+            line(ctx, rounded(38.5, 29.5, 23, 8.5, 1.5), shirt, width: 1.2)
+        }
+    )
+}()
+
+// 日系街頭：oversize 霧紫帽 T 蓋到大腿，白色厚底球鞋。
+let streetClothes: ClothesStyle = {
+    let hoodie = hex(0xB7A6C9), hoodieDark = hex(0x9483AA)
+    return ClothesStyle(
+        id: "street_hoodie", name: "日系街頭帽T", sleeve: hoodie, cuff: hoodieDark, sleeveWidth: 7.6,
+        legging: skin, sock: white, shoe: hex(0xF4F4F4), shoeHeight: 8.5,
+        torso: { ctx, _ in
+            shape(ctx, rounded(32, 10, 36, 29, 9), hoodie)
+            line(ctx, segment(pt(34.5, 13), pt(65.5, 13)), hoodieDark, width: 1.4)   // 下襬羅紋
+            shape(ctx, rounded(41, 15, 18, 8, 3.5), hoodieDark, lineWidth: 1.4)       // 大口袋
+            shape(ctx, ellipse(50, 37.5, 34, 8), hoodieDark, lineWidth: 1.6)          // 帽子圍在脖子
+            // 帽繩
+            for (a, b) in [(pt(47, 35), pt(46, 27)), (pt(55, 35), pt(56, 27.5))] {
+                line(ctx, segment(a, b), white, width: 1.5)
+                shape(ctx, ellipse(b.x, b.y, 2.4, 2.4), white, lineWidth: 1)
+            }
+        },
+        torsoBack: { ctx, _ in
+            shape(ctx, rounded(32, 10, 36, 29, 9), hoodie)
+            line(ctx, segment(pt(34.5, 13), pt(65.5, 13)), hoodieDark, width: 1.4)
+            // 帽子垂在背上
+            shape(ctx, rounded(38, 23, 24, 16, 8), hoodieDark, lineWidth: 1.6)
+            line(ctx, quad(pt(41, 36), pt(59, 36), pt(50, 30)), hoodie, width: 1.4)
+        }
+    )
+}()
+
+// 日系浴衣：深藍底櫻花紋的短版浴衣、粉紅腰帶、木屐。
+let yukataClothes: ClothesStyle = {
+    let navy = hex(0x2D3A6E), sakura = hex(0xF6A9C2), obi = hex(0xE85C7A), cord = hex(0xFFE27A)
+    func robe(_ ctx: CGContext) {
+        let r = CGMutablePath()
+        r.move(to: pt(36, 38.5))
+        r.addLine(to: pt(64, 38.5))
+        r.addLine(to: pt(67, 12))
+        r.addQuadCurve(to: pt(50, 11), control: pt(58, 10.5))
+        r.addQuadCurve(to: pt(33, 12), control: pt(42, 10.5))
+        r.closeSubpath()
+        shape(ctx, r, navy)
+        for c in [pt(39, 15), pt(55, 15.5), pt(62.5, 31), pt(38.5, 32), pt(47, 16.5), pt(60.5, 18)] {
+            shape(ctx, ellipse(c.x, c.y, 3.8, 3.8), sakura, lineWidth: 0.9)
+            shape(ctx, ellipse(c.x, c.y, 1.2, 1.2), white, stroke: false)
+        }
+    }
+    return ClothesStyle(
+        id: "yukata", name: "日系浴衣", sleeve: navy, cuff: navy, sleeveWidth: 9,
+        legging: skin, sock: white, shoe: hex(0xC8935A), shoeHeight: 5.5,
+        torso: { ctx, _ in
+            robe(ctx)
+            // 交領
+            line(ctx, segment(pt(45, 38.5), pt(53, 27)), white, width: 2.2)
+            line(ctx, segment(pt(57, 38.5), pt(50.5, 31)), white, width: 2.2)
+            shape(ctx, rounded(35, 21, 30, 6.5, 1.5), obi, lineWidth: 1.6)
+            line(ctx, segment(pt(35.5, 24.2), pt(64.5, 24.2)), cord, width: 1)
+        },
+        torsoBack: { ctx, _ in
+            robe(ctx)
+            shape(ctx, rounded(34, 21, 32, 6.5, 1.5), obi, lineWidth: 1.6)
+            drawBow(ctx, at: pt(50, 24.5), size: 7, obi)   // 背後的文庫結
+        }
+    )
+}()
+
+let clothesStyles: [ClothesStyle] = [amiyaClothes, jiraiClothes, ryousanClothes, sailorClothes, streetClothes, yukataClothes]
+
+// 目前畫的是哪一套。產生本體與一般服裝時是阿米婭原本的樣子；產生外觀圖層時才會換。
+let defaultLook = Look(hair: amiyaHair, clothes: amiyaClothes)
+var look = defaultLook
+
 // MARK: - 每個動作的姿勢
 
 struct ActionSpec {
@@ -1106,6 +1663,10 @@ let actions: [ActionSpec] = [
     // 一格是擺盪的四分之一週期，要跟程式裡的 swingPeriod（2.4 秒）對上
     ActionSpec(name: "swing", frames: 4, fps: 4 / 2.4, loop: true),
     ActionSpec(name: "fly", frames: 2, fps: 4, loop: true),
+    // 跟著你打字：每按一個鍵換下一格（fps 只是備用）
+    ActionSpec(name: "keytap", frames: 4, fps: 8, loop: true),
+    // 你點一下滑鼠：她舉手「點！」一下
+    ActionSpec(name: "tap", frames: 2, fps: 6, loop: false),
 ]
 
 func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
@@ -1243,6 +1804,29 @@ func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
         p.ears = i == 0 ? 0.55 : 0.68
         p.eyes = i == 0 ? .open : .happy
         p.mouthOpen = i == 1
+    case "keytap":
+        // 站著在空中打字：雙手在胸前一上一下輪流敲，盯著前面，偶爾開心張嘴
+        let even = i % 2 == 0
+        p.lean = 0.06
+        p.squashY = even ? 1 : 0.985
+        p.armFront = even ? 1.62 : 1.36
+        p.armBack = even ? 1.34 : 1.6
+        p.headTilt = 0.04
+        p.ears = even ? 0.04 : 0.14
+        p.mouthOpen = i == 3
+    case "tap":
+        // 點一下：前手往上一指、耳朵豎起來、輕輕彈一下
+        if i == 0 {
+            p.bodyY = 2
+            p.squashY = 1.03; p.squashX = 0.98
+            p.armFront = 2.45; p.armBack = 0.35
+            p.ears = -0.2
+            p.eyes = .happy
+            p.mouthOpen = true
+        } else {
+            p.armFront = 1.9; p.armBack = 0.25
+            p.ears = 0.05
+        }
     case "parachute":
         // 吊在傘下：雙手抓繩、腳懸空晃來晃去
         p.straps = true
@@ -1632,7 +2216,7 @@ func renderPNG(width: CGFloat = canvas, height: CGFloat = canvas, offset: CGFloa
 }
 
 let fm = FileManager.default
-for dir in ["body", "outfits"] {
+for dir in ["body", "outfits", "looks"] {
     try? fm.removeItem(at: outputRoot.appendingPathComponent(dir))
 }
 
@@ -1642,8 +2226,12 @@ func write(_ data: Data, _ relative: String) throws {
     try data.write(to: url)
 }
 
+// 調外觀時的快速預覽：LOOK_PREVIEW=idle_0,dance_10 只畫這幾格的外觀圖層（不畫本體、服裝、道具）。
+let previewFrames: Set<String>? = ProcessInfo.processInfo.environment["LOOK_PREVIEW"]
+    .map { Set($0.split(separator: ",").map(String.init)) }
+
 var count = 0
-for spec in actions {
+for spec in actions where previewFrames == nil {
     for i in 0..<spec.frames {
         var p = pose(spec.name, i, spec.frames)
         p.frame = i
@@ -1657,6 +2245,7 @@ for spec in actions {
     }
 }
 
+if previewFrames == nil {
 try write(renderPNG(height: canopyHeight, offset: 0) { drawCanopy($0) }, "props/parachute.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: false) }, "props/dining.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: true) }, "props/dining_meal.png")
@@ -1667,6 +2256,36 @@ for (part, name) in [(PlanePart.parked, "plane"), (.back, "plane_back"), (.front
     try write(renderPNG(width: planeWidth, height: planeHeight) { drawPlane($0, part) }, "props/\(name).png")
 }
 count += 10
+}
+
+// 外觀圖層：每種髮型畫 hairBehind / head，每套服裝畫 base / top，各自獨立，App 再疊起來。
+// 哪幾格是背對畫面的（App 要把天使翅膀這類「在身後」的服裝改疊到身體前面）。
+var backFrames: [String: [Int]] = [:]
+for spec in actions {
+    for i in 0..<spec.frames {
+        var p = pose(spec.name, i, spec.frames)
+        p.frame = i
+        p.frameCount = spec.frames
+        if p.back { backFrames[spec.name, default: []].append(i) }
+        if let previewFrames, !previewFrames.contains("\(spec.name)_\(i)") { continue }
+        for hair in hairStyles {
+            look = Look(hair: hair, clothes: amiyaClothes)
+            try write(renderPNG { drawBody($0, p, [.hairBehind]) }, "looks/hair/\(hair.id)/behind/\(spec.name)_\(i).png")
+            try write(renderPNG { drawBody($0, p, [.head]) }, "looks/hair/\(hair.id)/head/\(spec.name)_\(i).png")
+            count += 2
+        }
+        for clothes in clothesStyles {
+            look = Look(hair: amiyaHair, clothes: clothes)
+            try write(renderPNG { drawBody($0, p, [.base]) }, "looks/clothes/\(clothes.id)/base/\(spec.name)_\(i).png")
+            try write(renderPNG { drawBody($0, p, [.top]) }, "looks/clothes/\(clothes.id)/top/\(spec.name)_\(i).png")
+            count += 2
+        }
+    }
+}
+look = defaultLook
+
+// 會呼叫 cutOutBody、畫在她身後的服裝：正面時 App 把它們疊在身體下面，長髮才會蓋在翅膀前面。
+let behindOutfits: Set<String> = ["wings", "vip_wings"]
 
 // manifest.json：程式靠它知道有哪些動作、幾格、多快，以及有哪些服裝。
 let manifest: [String: Any] = [
@@ -1684,8 +2303,15 @@ let manifest: [String: Any] = [
     ],
     "outfits": outfits.map {
         ["id": $0.id, "name": $0.name, "slot": $0.slot,
-         "power": outfitPower[$0.id] ?? 0, "dungeon": dungeonOutfits.contains($0.id)] as [String: Any]
+         "power": outfitPower[$0.id] ?? 0, "dungeon": dungeonOutfits.contains($0.id),
+         "behind": behindOutfits.contains($0.id)] as [String: Any]
     },
+    // 外觀（髮型 / 服裝）：純外觀、不加戰鬥力。第一個是預設。
+    "looks": [
+        "hair": hairStyles.map { ["id": $0.id, "name": $0.name] },
+        "clothes": clothesStyles.map { ["id": $0.id, "name": $0.name] },
+    ],
+    "backFrames": backFrames,
 ]
 let json = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
 try write(json, "manifest.json")

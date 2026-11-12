@@ -1,6 +1,6 @@
 // PetView.swift —— 負責「畫出寵物」以及「處理滑鼠互動」的自訂 View。
 //
-// 畫面由好幾層 CALayer 疊成：最底下是本體，上面依序是各部位的服裝。
+// 畫面由好幾層 CALayer 疊成：最底下是本體（髮型 / 衣服各自一層），上面依序是各部位的服裝。
 // 每一層都換成同一個動作、同一格的圖，所以衣服會跟著身體一起動。
 import AppKit
 
@@ -10,13 +10,14 @@ final class PetView: NSView {
 
     // 所有圖層的容器；面向左邊時把整個容器水平翻轉。
     private let spriteRoot = CALayer()
-    private let bodyLayer = CALayer()
+    private var bodyLayers: [CALayer] = []              // 本體的各層（見 SpriteLibrary.bodyLayers）
     private var outfitLayers: [String: CALayer] = [:]   // 部位 id → 圖層
 
     // 目前顯示的狀態，沒變就不重設圖片。
     private var shownAction: PetAction?
     private var shownFrame = -1
     private var outfits: [String: String] = [:]
+    private var look: Look
 
     var facingLeft = false {
         didSet {
@@ -37,6 +38,7 @@ final class PetView: NSView {
 
     init(frame: NSRect, sprites: SpriteLibrary) {
         self.sprites = sprites
+        self.look = sprites.defaultLook
         super.init(frame: frame)
 
         wantsLayer = true
@@ -44,7 +46,11 @@ final class PetView: NSView {
         layer?.addSublayer(spriteRoot)
 
         // 本體在最下面，服裝依 manifest 的 slots 順序往上疊。
-        setupImageLayer(bodyLayer)
+        for _ in 0..<4 {
+            let l = CALayer()
+            setupImageLayer(l)
+            bodyLayers.append(l)
+        }
         for slot in sprites.manifest.slots {
             let l = CALayer()
             setupImageLayer(l)
@@ -70,6 +76,12 @@ final class PetView: NSView {
         refreshImages()
     }
 
+    // 換髮型 / 衣服。
+    func setLook(_ look: Look) {
+        self.look = look
+        refreshImages()
+    }
+
     // 換裝：部位 id → 服裝 id。
     func setOutfits(_ equipped: [String: String]) {
         outfits = equipped
@@ -79,9 +91,15 @@ final class PetView: NSView {
     private func refreshImages() {
         guard let action = shownAction else { return }
         withoutAnimation {
-            bodyLayer.contents = sprites.bodyFrame(action, shownFrame)
+            let images = sprites.bodyLayers(look, action, shownFrame)
+            for (i, layer) in bodyLayers.enumerated() {
+                layer.contents = i < images.count ? images[i] : nil
+            }
             for (slot, layer) in outfitLayers {
-                layer.contents = outfits[slot].flatMap { sprites.outfitFrame($0, action, shownFrame) }
+                let id = outfits[slot]
+                layer.contents = id.flatMap { sprites.outfitFrame($0, action, shownFrame) }
+                // 翅膀在正面時是在她身後：疊到本體下面，長髮才會蓋在翅膀前面
+                layer.zPosition = id.map { sprites.isBehind($0, action, shownFrame) } == true ? -1 : 0
             }
         }
     }

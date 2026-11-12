@@ -35,6 +35,11 @@
       "frames" : 4,
       "loop" : false
     },
+    "keytap" : {
+      "fps" : 8,
+      "frames" : 4,
+      "loop" : true
+    },
     "parachute" : {
       "fps" : 4,
       "frames" : 4,
@@ -60,6 +65,11 @@
       "frames" : 4,
       "loop" : true
     },
+    "tap" : {
+      "fps" : 6,
+      "frames" : 2,
+      "loop" : false
+    },
     "typing" : {
       "fps" : 6,
       "frames" : 4,
@@ -71,12 +81,78 @@
       "loop" : true
     }
   },
+  "backFrames" : {
+    "dance" : [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ]
+  },
   "canvas" : {
     "height" : 112,
     "width" : 112
   },
+  "looks" : {
+    "clothes" : [
+      {
+        "id" : "amiya",
+        "name" : "阿米婭"
+      },
+      {
+        "id" : "jirai",
+        "name" : "地雷系"
+      },
+      {
+        "id" : "ryousan",
+        "name" : "量產型"
+      },
+      {
+        "id" : "sailor",
+        "name" : "日系水手服"
+      },
+      {
+        "id" : "street_hoodie",
+        "name" : "日系街頭帽T"
+      },
+      {
+        "id" : "yukata",
+        "name" : "日系浴衣"
+      }
+    ],
+    "hair" : [
+      {
+        "id" : "amiya",
+        "name" : "阿米婭"
+      },
+      {
+        "id" : "jirai_twintails",
+        "name" : "地雷系雙馬尾"
+      },
+      {
+        "id" : "wolf_milktea",
+        "name" : "日系鯔魚頭・奶茶"
+      },
+      {
+        "id" : "wolf_silver",
+        "name" : "日系鯔魚頭・黑銀挑染"
+      },
+      {
+        "id" : "hime_cut",
+        "name" : "日系公主切"
+      },
+      {
+        "id" : "short_bob",
+        "name" : "日系短鮑伯"
+      }
+    ]
+  },
   "outfits" : [
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "cap",
       "name" : "棒球帽",
@@ -84,6 +160,7 @@
       "slot" : "head"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "party_hat",
       "name" : "派對帽",
@@ -91,6 +168,7 @@
       "slot" : "head"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "glasses",
       "name" : "圓框眼鏡",
@@ -98,6 +176,7 @@
       "slot" : "face"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "sunglasses",
       "name" : "墨鏡",
@@ -105,6 +184,7 @@
       "slot" : "face"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "scarf",
       "name" : "圍巾",
@@ -112,6 +192,7 @@
       "slot" : "neck"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "bowtie",
       "name" : "領結",
@@ -119,6 +200,7 @@
       "slot" : "neck"
     },
     {
+      "behind" : false,
       "dungeon" : true,
       "id" : "straw_hat",
       "name" : "草帽",
@@ -126,6 +208,7 @@
       "slot" : "head"
     },
     {
+      "behind" : false,
       "dungeon" : true,
       "id" : "witch_hat",
       "name" : "魔法帽",
@@ -133,6 +216,7 @@
       "slot" : "head"
     },
     {
+      "behind" : false,
       "dungeon" : true,
       "id" : "cape",
       "name" : "披風",
@@ -140,6 +224,7 @@
       "slot" : "neck"
     },
     {
+      "behind" : false,
       "dungeon" : true,
       "id" : "crown",
       "name" : "王冠",
@@ -147,6 +232,7 @@
       "slot" : "head"
     },
     {
+      "behind" : false,
       "dungeon" : true,
       "id" : "ribbon",
       "name" : "蝴蝶結",
@@ -154,6 +240,7 @@
       "slot" : "head"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "flower_crown",
       "name" : "花冠",
@@ -161,6 +248,7 @@
       "slot" : "head"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "headphones",
       "name" : "耳機",
@@ -168,6 +256,7 @@
       "slot" : "head"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "goggles",
       "name" : "飛行護目鏡",
@@ -175,6 +264,7 @@
       "slot" : "face"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "heart_glasses",
       "name" : "愛心眼鏡",
@@ -182,6 +272,7 @@
       "slot" : "face"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "bell_collar",
       "name" : "鈴鐺項圈",
@@ -189,6 +280,7 @@
       "slot" : "neck"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "balloon",
       "name" : "氣球",
@@ -196,6 +288,7 @@
       "slot" : "hand"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "lollipop",
       "name" : "棒棒糖",
@@ -203,6 +296,7 @@
       "slot" : "hand"
     },
     {
+      "behind" : false,
       "dungeon" : false,
       "id" : "backpack",
       "name" : "小書包",
@@ -210,6 +304,7 @@
       "slot" : "back"
     },
     {
+      "behind" : true,
       "dungeon" : false,
       "id" : "wings",
       "name" : "天使翅膀",
@@ -217,6 +312,7 @@
       "slot" : "back"
     },
     {
+      "behind" : true,
       "dungeon" : false,
       "id" : "vip_wings",
       "name" : "VIP 星耀之翼",

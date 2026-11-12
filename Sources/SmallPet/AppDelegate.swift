@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let stats = PetStats()
     private var statusWindow: StatusWindowController!
     private var scenery: Scenery!
+    private var inputSync: InputSync!
 
     private var statusItem: NSStatusItem!
     private var timer: Timer?
@@ -33,9 +34,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         pet = Pet(sprites: sprites, speech: PetSpeech(resources: sprites.root))
         pet.view.setOutfits(wardrobe.equipped)
+        pet.view.setLook(wardrobe.look)
         wardrobe.onChange = { [weak self] in
             guard let self else { return }
             self.pet.view.setOutfits(self.wardrobe.equipped)
+            self.pet.view.setLook(self.wardrobe.look)
             self.stats.outfitBonus = self.wardrobe.powerBonus
             if self.pet.travel == .none { self.pet.speech.say("wardrobe") }
         }
@@ -56,6 +59,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             pet.hideAway()   // 上次關掉 App 時她還在冒險，時間到了會在動畫迴圈裡回家
         } else {
             pet.speech.greet()
+        }
+
+        inputSync = InputSync()
+        inputSync.onKey = { [weak self] in
+            guard let self, !self.pet.concealed else { return }
+            self.pet.keyPressed()
+        }
+        inputSync.onClick = { [weak self] point in
+            guard let self, !self.pet.concealed else { return }
+            self.pet.mouseClicked(at: point)
         }
 
         setupStatusItem()
@@ -123,6 +136,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         autoItem.state = pet.autoMode ? .on : .off
         menu.addItem(autoItem)
 
+        let syncItem = NSMenuItem(title: "跟著我打字 / 點擊", action: #selector(toggleInputSync), keyEquivalent: "")
+        syncItem.target = self
+        syncItem.state = inputSync.enabled ? .on : .off
+        menu.addItem(syncItem)
+        if inputSync.enabled, !inputSync.keyboardAllowed {
+            // 還沒給鍵盤權限：點了打開設定頁
+            let permItem = NSMenuItem(title: "　⚠︎ 鍵盤需要「輔助使用」權限…", action: #selector(openAccessibility), keyEquivalent: "")
+            permItem.target = self
+            menu.addItem(permItem)
+        }
+
         let talkItem = NSMenuItem(title: "說句話", action: #selector(talk), keyEquivalent: "")
         talkItem.target = self
         menu.addItem(talkItem)
@@ -165,6 +189,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleAutoMode() {
         pet.autoMode.toggle()
+    }
+
+    @objc private func toggleInputSync() {
+        inputSync.setEnabled(!inputSync.enabled)
+    }
+
+    @objc private func openAccessibility() {
+        inputSync.openAccessibilitySettings()
     }
 
     @objc private func talk() {

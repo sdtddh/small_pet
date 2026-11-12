@@ -100,6 +100,11 @@ final class Pet {
     // 自動換動作時，碎念的機率。
     var chatterChance = 0.3
 
+    // 跟著你打字：按了幾個鍵（決定 keytap / typing 顯示哪一格）、最後一次按鍵的時間。
+    private var keyCount = 0
+    private var lastKeyTime: Double = -10
+    private var keysRecent: Bool { CACurrentMediaTime() - lastKeyTime < 0.6 }
+
     init(sprites: SpriteLibrary, speech: PetSpeech) {
         self.sprites = sprites
         self.speech = speech
@@ -222,6 +227,36 @@ final class Pet {
         afterTravel = done
         window.setFrameOrigin(NSPoint(x: posX, y: posY))
         window.orderFrontRegardless()
+    }
+
+    // MARK: - 跟著你打字 / 點擊（InputSync 呼叫）
+
+    // 你按了一個鍵：她跟著敲一下。在電腦桌前打電腦時，她的手也改成跟著你的節奏。
+    func keyPressed() {
+        keyCount += 1
+        lastKeyTime = CACurrentMediaTime()
+        if action == .keytap {
+            actionDuration = actionTime + PetAction.keytap.autoDuration.lowerBound   // 繼續打，停手 1.5 秒後才結束
+            return
+        }
+        if action == .typing { return }
+        // 睡覺、被抓、在空中、出門、正在忙（走去吃飯、盪鞦韆、開飛機…）時不打擾她；剛被點一下的話可以接著打
+        guard canAct, action != .sleep, !isBusy || action == .tap else { return }
+        let first = action != .tap
+        setAction(.keytap)
+        isInterlude = true
+        if first { speech.say("keytap", chance: 0.25, force: false) }
+    }
+
+    // 你在螢幕某處點了一下滑鼠：她轉頭看過去，舉手「點！」一下。
+    func mouseClicked(at point: NSPoint) {
+        guard canAct, action != .sleep, action != .typing else { return }
+        if isBusy, action != .tap, action != .keytap { return }
+        let center = posX + size.width / 2
+        if abs(point.x - center) > 4 { direction = point.x > center ? 1 : -1 }
+        if action == .keytap { return }   // 正在跟你打字：轉頭看一下就好
+        setAction(.tap)
+        isInterlude = true
     }
 
     // 單擊：睡覺中就被叫醒，否則回應一句。
@@ -491,6 +526,10 @@ final class Pet {
     private func currentFrame() -> Int {
         let info = sprites.info(action)
         let last = max(info.frames - 1, 0)
+        // 跟著你打字：每按一個鍵換一格
+        if action == .keytap || (action == .typing && keysRecent) {
+            return keyCount % max(info.frames, 1)
+        }
         if action == .jump {
             // 跳躍的格子由物理狀態決定：0 蹲、1 上升、2 下降、3 落地
             if !jumpLaunched { return 0 }

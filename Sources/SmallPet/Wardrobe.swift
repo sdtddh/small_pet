@@ -1,6 +1,7 @@
 // Wardrobe.swift —— 記錄寵物目前穿什麼，並提供「衣櫃」視窗。
 //
 // 每個部位（手上、頭、臉、脖子、背後）同時只能穿一件；選擇會存在 UserDefaults，下次開啟還在。
+// 另外還有「外觀」：髮型和衣服，純粹換造型、不加戰鬥力。
 import AppKit
 import SwiftUI
 
@@ -8,9 +9,13 @@ import SwiftUI
 final class Wardrobe: ObservableObject {
 
     private static let defaultsKey = "equippedOutfits"
+    private static let lookKey = "look"
 
     // 部位 id → 服裝 id。
     @Published private(set) var equipped: [String: String]
+
+    // 目前的髮型 + 衣服。
+    @Published private(set) var look: Look
 
     // 換裝時通知寵物重畫。
     var onChange: (() -> Void)?
@@ -25,6 +30,21 @@ final class Wardrobe: ObservableObject {
         // 過濾掉已經不存在的服裝（例如素材被刪掉了）。
         let valid = Set(sprites.manifest.outfits.map(\.id))
         equipped = saved.filter { valid.contains($0.value) }
+
+        var look = sprites.defaultLook
+        let savedLook = UserDefaults.standard.dictionary(forKey: Self.lookKey) as? [String: String] ?? [:]
+        if let h = savedLook["hair"], sprites.manifest.looks?.hair.contains(where: { $0.id == h }) == true { look.hair = h }
+        if let c = savedLook["clothes"], sprites.manifest.looks?.clothes.contains(where: { $0.id == c }) == true { look.clothes = c }
+        self.look = look
+    }
+
+    func setHair(_ id: String) { setLook(Look(hair: id, clothes: look.clothes)) }
+    func setClothes(_ id: String) { setLook(Look(hair: look.hair, clothes: id)) }
+
+    private func setLook(_ new: Look) {
+        look = new
+        UserDefaults.standard.set(["hair": new.hair, "clothes": new.clothes], forKey: Self.lookKey)
+        onChange?()
     }
 
     // 衣櫃裡看得到的服裝：一般服裝 + 從地下城拿到的服裝。
@@ -92,11 +112,23 @@ struct WardrobeView: View {
     var body: some View {
         VStack(spacing: 16) {
             // 大預覽：目前的穿搭
-            PetPreview(sprites: sprites, outfits: wardrobe.equipped)
+            PetPreview(sprites: sprites, outfits: wardrobe.equipped, look: wardrobe.look)
                 .frame(width: 140, height: 140)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    // 外觀：髮型、衣服（純外觀，不加戰鬥力）
+                    if let looks = sprites.manifest.looks {
+                        Text("外觀（不影響戰鬥力）").font(.caption).foregroundStyle(.secondary)
+                        lookRow("髮型", looks.hair, selected: wardrobe.look.hair) { id in
+                            var l = wardrobe.look; l.hair = id; return l
+                        } choose: { wardrobe.setHair($0) }
+                        lookRow("衣服", looks.clothes, selected: wardrobe.look.clothes) { id in
+                            var l = wardrobe.look; l.clothes = id; return l
+                        } choose: { wardrobe.setClothes($0) }
+                        Divider()
+                        Text("配件").font(.caption).foregroundStyle(.secondary)
+                    }
                     // 由上往下顯示：手上 → 頭 → 臉 → 脖子 → 背後（manifest 裡是疊圖順序，所以反過來）
                     ForEach(sprites.manifest.slots.reversed()) { slot in
                         slotRow(slot)
@@ -107,6 +139,42 @@ struct WardrobeView: View {
         }
         .padding(.vertical)
         .frame(minWidth: 420, minHeight: 600)
+    }
+
+    private func lookRow(_ title: String, _ options: [Manifest.LookOption], selected: String,
+                         preview: @escaping (String) -> Look, choose: @escaping (String) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.headline)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(options) { option in
+                        Button { choose(option.id) } label: {
+                            card(name: option.name, selected: option.id == selected) {
+                                PetPreview(sprites: sprites, outfits: wardrobe.equipped, look: preview(option.id))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    // 一張選項卡：縮圖 + 名字，選中時有框。
+    private func card(name: String, selected: Bool, @ViewBuilder preview: () -> some View) -> some View {
+        VStack(spacing: 4) {
+            preview().frame(width: 64, height: 64)
+            Text(name).font(.caption).lineLimit(1).fixedSize()
+        }
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(selected ? Color.accentColor.opacity(0.18) : Color.gray.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(selected ? Color.accentColor : .clear, lineWidth: 2)
+        )
     }
 
     private func slotRow(_ slot: Manifest.Slot) -> some View {
@@ -133,20 +201,9 @@ struct WardrobeView: View {
         return Button {
             wardrobe.equip(outfitID, slot: slot)
         } label: {
-            VStack(spacing: 4) {
-                PetPreview(sprites: sprites, outfits: preview)
-                    .frame(width: 64, height: 64)
-                Text(name).font(.caption)
+            card(name: name, selected: selected) {
+                PetPreview(sprites: sprites, outfits: preview, look: wardrobe.look)
             }
-            .padding(6)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(selected ? Color.accentColor.opacity(0.18) : Color.gray.opacity(0.08))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(selected ? Color.accentColor : .clear, lineWidth: 2)
-            )
         }
         .buttonStyle(.plain)
     }
@@ -156,16 +213,22 @@ struct WardrobeView: View {
 struct PetPreview: View {
     let sprites: SpriteLibrary
     let outfits: [String: String]
+    let look: Look
+
+    // 由下往上：身後的服裝（翅膀）→ 本體各層 → 其他服裝。
+    private var images: [NSImage] {
+        let worn = sprites.manifest.slots.compactMap { outfits[$0.id] }
+        let behind = worn.filter { sprites.isBehind($0, .idle, 0) }
+        let front = worn.filter { !sprites.isBehind($0, .idle, 0) }
+        return behind.compactMap { sprites.outfitFrame($0, .idle, 0) }
+            + sprites.bodyLayers(look, .idle, 0).compactMap { $0 }
+            + front.compactMap { sprites.outfitFrame($0, .idle, 0) }
+    }
 
     var body: some View {
         ZStack {
-            if let body = sprites.bodyFrame(.idle, 0) {
-                Image(nsImage: body).resizable().scaledToFit()
-            }
-            ForEach(sprites.manifest.slots) { slot in
-                if let id = outfits[slot.id], let image = sprites.outfitFrame(id, .idle, 0) {
-                    Image(nsImage: image).resizable().scaledToFit()
-                }
+            ForEach(Array(images.enumerated()), id: \.offset) { _, image in
+                Image(nsImage: image).resizable().scaledToFit()
             }
         }
     }
