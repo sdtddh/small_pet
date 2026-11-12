@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# SwiftPM build output
+.build/
+.swiftpm/
+*.xcodeproj/
+xcuserdata/
+
+# Built app (rebuild with ./make-app.sh)
+SmallPet.app/
