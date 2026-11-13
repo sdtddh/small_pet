@@ -2491,8 +2491,11 @@ func renderPNG(width: CGFloat = canvas, height: CGFloat = canvas, offset: CGFloa
 }
 
 let fm = FileManager.default
-for dir in ["body", "outfits", "looks"] {
-    try? fm.removeItem(at: outputRoot.appendingPathComponent(dir))
+// 先清掉舊圖（舊的一格一張圖、已經刪掉的服裝）。LOOK_PREVIEW 只重畫幾格，要沿用舊的 sprite sheet，不清。
+if ProcessInfo.processInfo.environment["LOOK_PREVIEW"] == nil {
+    for dir in ["body", "outfits", "looks"] {
+        try? fm.removeItem(at: outputRoot.appendingPathComponent(dir))
+    }
 }
 
 func write(_ data: Data, _ relative: String) throws {
@@ -2500,6 +2503,56 @@ func write(_ data: Data, _ relative: String) throws {
     let url = (relative.hasPrefix("props/") ? resourcesRoot : outputRoot).appendingPathComponent(relative)
     try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try data.write(to: url)
+}
+
+// MARK: 一層一張圖（sprite sheet）
+//
+// 每一層（本體、每件服裝、每個髮型 / 衣服的每一層）所有動作的所有格，排成一張圖：
+// 依 actions 的順序一格接一格，由左到右、由上到下，每列 sheetColumns 格。
+// manifest.json 的 "sheet" 記下每列幾格、每格幾像素、每個動作從第幾格開始，App 照這個切。
+let sheetColumns = 8
+let sheetCell = Int(canvas * scale)
+let sheetStart: [String: Int] = {
+    var start: [String: Int] = [:], n = 0
+    for spec in actions { start[spec.name] = n; n += spec.frames }
+    return start
+}()
+let sheetTotal = actions.reduce(0) { $0 + $1.frames }
+var sheetFrames: [String: [Int: Data]] = [:]     // 層 → 第幾格 → 那一格的 PNG
+
+// 先把這一格收起來，最後 writeSheets() 一次拼成整張。
+func addFrame(_ data: Data, _ folder: String, _ action: String, _ i: Int) {
+    sheetFrames[folder, default: [:]][sheetStart[action]! + i] = data
+}
+
+func decodeImage(_ data: Data) -> CGImage? {
+    CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
+}
+
+// 把收起來的格子拼成 <層>.png。只畫了幾格（LOOK_PREVIEW）時，其他格沿用舊的那張圖。
+func writeSheets() throws {
+    let rows = (sheetTotal + sheetColumns - 1) / sheetColumns
+    let w = sheetColumns * sheetCell, h = rows * sheetCell
+    for (folder, frames) in sheetFrames.sorted(by: { $0.key < $1.key }) {
+        let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        // 第 k 格在圖上的位置（CGContext 的原點在左下，圖的第一列在最上面）
+        func cellRect(_ k: Int) -> CGRect {
+            CGRect(x: (k % sheetColumns) * sheetCell, y: h - (k / sheetColumns + 1) * sheetCell, width: sheetCell, height: sheetCell)
+        }
+        if frames.count < sheetTotal,
+           let old = (try? Data(contentsOf: outputRoot.appendingPathComponent("\(folder).png"))).flatMap(decodeImage),
+           old.width == w, old.height == h {
+            ctx.draw(old, in: CGRect(x: 0, y: 0, width: w, height: h))
+        }
+        for (k, data) in frames {
+            guard let image = decodeImage(data) else { continue }
+            ctx.clear(cellRect(k))
+            ctx.draw(image, in: cellRect(k))
+        }
+        try write(NSBitmapImageRep(cgImage: ctx.makeImage()!).representation(using: .png, properties: [:])!, "\(folder).png")
+    }
 }
 
 // 調外觀時的快速預覽：LOOK_PREVIEW=idle_0,dance_10 只畫這幾格的外觀圖層（不畫本體、服裝、道具）。
@@ -2512,10 +2565,10 @@ for spec in actions where previewFrames == nil {
         var p = pose(spec.name, i, spec.frames)
         p.frame = i
         p.frameCount = spec.frames
-        try write(renderPNG { drawBody($0, p) }, "body/\(spec.name)_\(i).png")
+        addFrame(renderPNG { drawBody($0, p) }, "body", spec.name, i)
         count += 1
         for outfit in outfits {
-            try write(renderPNG { outfit.draw($0, p) }, "outfits/\(outfit.id)/\(spec.name)_\(i).png")
+            addFrame(renderPNG { outfit.draw($0, p) }, "outfits/\(outfit.id)", spec.name, i)
             count += 1
         }
     }
@@ -2547,19 +2600,20 @@ for spec in actions {
         if let previewFrames, !previewFrames.contains("\(spec.name)_\(i)") { continue }
         for hair in hairStyles {
             look = Look(hair: hair, clothes: amiyaClothes)
-            try write(renderPNG { drawBody($0, p, [.hairBehind]) }, "looks/hair/\(hair.id)/behind/\(spec.name)_\(i).png")
-            try write(renderPNG { drawBody($0, p, [.head]) }, "looks/hair/\(hair.id)/head/\(spec.name)_\(i).png")
+            addFrame(renderPNG { drawBody($0, p, [.hairBehind]) }, "looks/hair/\(hair.id)/behind", spec.name, i)
+            addFrame(renderPNG { drawBody($0, p, [.head]) }, "looks/hair/\(hair.id)/head", spec.name, i)
             count += 2
         }
         for clothes in clothesStyles {
             look = Look(hair: amiyaHair, clothes: clothes)
-            try write(renderPNG { drawBody($0, p, [.base]) }, "looks/clothes/\(clothes.id)/base/\(spec.name)_\(i).png")
-            try write(renderPNG { drawBody($0, p, [.top]) }, "looks/clothes/\(clothes.id)/top/\(spec.name)_\(i).png")
+            addFrame(renderPNG { drawBody($0, p, [.base]) }, "looks/clothes/\(clothes.id)/base", spec.name, i)
+            addFrame(renderPNG { drawBody($0, p, [.top]) }, "looks/clothes/\(clothes.id)/top", spec.name, i)
             count += 2
         }
     }
 }
 look = defaultLook
+try writeSheets()
 
 // 會呼叫 cutOutBody、畫在她身後的服裝：正面時 App 把它們疊在身體下面，長髮才會蓋在翅膀前面。
 let behindOutfits: Set<String> = ["wings", "vip_wings"]
@@ -2590,8 +2644,11 @@ let manifest: [String: Any] = [
         "clothes": clothesStyles.map { ["id": $0.id, "name": $0.name] },
     ],
     "backFrames": backFrames,
+    // 每一層的圖都是一張 sprite sheet（<層>.png）：每列 columns 格、每格 cell 像素，
+    // 動作的第 i 格是整張圖的第 start[動作] + i 格（由左到右、由上到下數）
+    "sheet": ["columns": sheetColumns, "cell": sheetCell, "start": sheetStart] as [String: Any],
 ]
 let json = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
 try write(json, "manifest.json")
 
-print("已產生 \(count) 張圖到 \(outputRoot.path)")
+print("已產生 \(count) 格、拼成 \(sheetFrames.count) 張 sprite sheet，放在 \(outputRoot.path)")
