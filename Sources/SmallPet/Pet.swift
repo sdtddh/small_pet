@@ -36,6 +36,9 @@ final class Pet {
     let window: PetWindow
     let view: PetView
     private let canopy: CanopyWindow
+    private let umbrellaCanopy: CanopyWindow   // 拿著雨傘時用撐開的雨傘代替降落傘
+    // 手上拿著雨傘（由 AppDelegate 依衣櫃設定）。
+    var holdsUmbrella = false
     let speech: PetSpeech
     private let sprites: SpriteLibrary
     private let size: NSSize
@@ -122,6 +125,7 @@ final class Pet {
         window = PetWindow(size: size)
         view = PetView(frame: NSRect(origin: .zero, size: size), sprites: sprites)
         canopy = CanopyWindow(image: sprites.prop("parachute"), width: size.width)
+        umbrellaCanopy = CanopyWindow(image: sprites.prop("umbrella_open"), width: size.width)
         window.contentView = view
         window.isMovableByWindowBackground = false
 
@@ -195,7 +199,7 @@ final class Pet {
         speech.muted = on
         if on {
             window.orderOut(nil)
-            canopy.setOpen(false, above: window.frame)
+            closeCanopies()
         } else if travel != .away {
             window.orderFrontRegardless()
         }
@@ -220,7 +224,12 @@ final class Pet {
     func hideAway() {
         travel = .away
         window.orderOut(nil)
+        closeCanopies()
+    }
+
+    private func closeCanopies() {
         canopy.setOpen(false, above: window.frame)
+        umbrellaCanopy.setOpen(false, above: window.frame)
     }
 
     // 回家：從隨機一側的螢幕外跑進來，跑進畫面後呼叫 done。
@@ -375,9 +384,12 @@ final class Pet {
         }
 
         view.facingLeft = direction < 0
-        view.show(action, frame: currentFrame())
+        let umbrella = action == .parachute && holdsUmbrella
+        view.show(umbrella ? .parasol : action, frame: currentFrame())
         window.setFrameOrigin(NSPoint(x: posX, y: posY))
-        canopy.setOpen(action == .parachute, above: window.frame)
+        canopy.setOpen(action == .parachute && !umbrella, above: window.frame)
+        umbrellaCanopy.setFlipped(direction < 0)
+        umbrellaCanopy.setOpen(umbrella, above: window.frame)
         speech.follow(window.frame)
     }
 

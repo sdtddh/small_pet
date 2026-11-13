@@ -95,13 +95,7 @@ final class WardrobeWindowController {
             w.center()
             window = w
         }
-        // 我們是 .accessory App（沒有 Dock 圖示），要主動把視窗叫到前面。
-        if #available(macOS 14, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        window?.makeKeyAndOrderFront(nil)
+        window?.bringToFront()
     }
 }
 
@@ -147,27 +141,36 @@ struct WardrobeView: View {
                          preview: @escaping (String) -> Look, choose: @escaping (String) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(options) { option in
-                        Button { choose(option.id) } label: {
-                            card(name: option.name, selected: option.id == selected) {
-                                PetPreview(sprites: sprites, outfits: wardrobe.equipped, look: preview(option.id))
-                            }
+            optionGrid {
+                ForEach(options) { option in
+                    Button { choose(option.id) } label: {
+                        card(name: option.name, selected: option.id == selected) {
+                            PetPreview(sprites: sprites, outfits: wardrobe.equipped, look: preview(option.id))
                         }
-                        .buttonStyle(.plain)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    // 選項排成會自動換行的格子。不用橫向 ScrollView：它包在直向 ScrollView 裡時，
+    // 游標停在某一排上用觸控板上下滑，滑動常被那一排吃掉，整個視窗就滑不動。
+    private func optionGrid(@ViewBuilder content: () -> some View) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: 10, alignment: .top)],
+                  alignment: .leading, spacing: 10, content: content)
     }
 
     // 一張選項卡：縮圖 + 名字，選中時有框。
     private func card(name: String, selected: Bool, @ViewBuilder preview: () -> some View) -> some View {
         VStack(spacing: 4) {
             preview().frame(width: 64, height: 64)
-            Text(name).font(.caption).lineLimit(1).fixedSize()
+            // 長名字換行（最多兩行），字不縮小；兩行固定高度讓卡片對齊，游標停上去看全名。
+            Text(name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
+                .frame(height: 30, alignment: .top)
         }
+        .frame(width: 68)
+        .help(name)
         .padding(6)
         .background(
             RoundedRectangle(cornerRadius: 10)
@@ -182,13 +185,11 @@ struct WardrobeView: View {
     private func slotRow(_ slot: Manifest.Slot) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(slot.name).font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    option(name: "無", outfitID: nil, slot: slot.id)
-                    ForEach(wardrobe.available(in: slot.id)) { outfit in
-                        option(name: outfit.power.map { $0 > 0 ? "\(outfit.name) +\($0)" : outfit.name } ?? outfit.name,
-                               outfitID: outfit.id, slot: slot.id)
-                    }
+            optionGrid {
+                option(name: "無", outfitID: nil, slot: slot.id)
+                ForEach(wardrobe.available(in: slot.id)) { outfit in
+                    option(name: outfit.power.map { $0 > 0 ? "\(outfit.name) +\($0)" : outfit.name } ?? outfit.name,
+                           outfitID: outfit.id, slot: slot.id)
                 }
             }
         }
