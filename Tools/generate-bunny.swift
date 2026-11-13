@@ -59,7 +59,6 @@ let skirt = kaf ? hex(0xE8542A) : hex(0x3F7EC0)
 let skirtLight = kaf ? hex(0xF27A4A) : hex(0x6FA6DC)
 let legging = hex(0x24242C)
 let shoe = kaf ? hex(0x3446C8) : hex(0x17171D)
-let ribbon = hex(0x6A3FC8)                              // カフ頭後垂下的紫色長緞帶
 let gemRed = hex(0xE0383A)
 let gemGreen = hex(0x2FB36A)
 let white = hex(0xFFFFFF)
@@ -208,8 +207,6 @@ func drawBody(_ ctx: CGContext, _ p: Pose) {
         }
     }
 
-    if kaf { withState(ctx, head(p)) { drawRibbons(ctx, p) } }
-
     // 後腳 + 後手（在身體後面）
     drawLeg(ctx, from: hipBack.applying(ut), to: CGPoint(x: footBack.x + p.backFoot.x, y: footBack.y + p.backFoot.y))
     if !raised(p.armBack) { withState(ctx, upper(p)) { drawArm(ctx, shoulderBack, p.armBack) } }
@@ -355,9 +352,8 @@ func drawBodyBack(_ ctx: CGContext, _ p: Pose) {
             shape(ctx, ellipse(0, 0, 14, 5), hairShine, stroke: false)
         }
         shape(ctx, ellipse(58, 75, 6, 2.6), hairShine, stroke: false)
-        if kaf {   // 背面：緞帶綁在後腦，辮子在左側（背對時換邊）
-            drawRibbons(ctx, p, fromBack: true)
-            drawBraid(ctx, top: CGPoint(x: 30, y: 60), bottom: CGPoint(x: 31, y: 34), sway: p.ears)
+        if kaf {   // 背面：辮子在左側（背對時換邊）
+            drawBraid(ctx, top: CGPoint(x: 30, y: 58), bottom: CGPoint(x: 31, y: 44), sway: p.ears)
         }
     }
 
@@ -450,7 +446,7 @@ func drawHead(_ ctx: CGContext, _ p: Pose) {
     if kaf {
         // 臉旁邊的辮子 + 菱形耳環
         drawEarring(ctx, at: CGPoint(x: 34.5, y: 38))
-        drawBraid(ctx, top: CGPoint(x: 75, y: 62), bottom: CGPoint(x: 76, y: 32), sway: p.ears)
+        drawBraid(ctx, top: CGPoint(x: 75, y: 58), bottom: CGPoint(x: 76, y: 44), sway: p.ears)
         drawEarring(ctx, at: CGPoint(x: 70, y: 37))
     } else {
         shape(ctx, petal(CGPoint(x: 76, y: 60), CGPoint(x: 74, y: 38), width: 6), hair, lineWidth: 1.8)
@@ -507,15 +503,15 @@ func drawHead(_ ctx: CGContext, _ p: Pose) {
 
 // カフ的辮子：一節一節的小橢圓，尾端綁一小撮。sway 讓它跟著動作微微擺。
 func drawBraid(_ ctx: CGContext, top: CGPoint, bottom: CGPoint, sway: CGFloat) {
-    let n = 6
-    let end = CGPoint(x: bottom.x - sway * 6, y: bottom.y)
+    let n = 4
+    let end = CGPoint(x: bottom.x - sway * 3, y: bottom.y)
     for i in 0..<n {
         let k = CGFloat(i) / CGFloat(n - 1)
         let c = CGPoint(x: top.x + (end.x - top.x) * k * k, y: top.y + (end.y - top.y) * k)
-        shape(ctx, ellipse(c.x, c.y, 6.5 - k * 1.2, 6.5), i % 2 == 0 ? hair : hairDark, lineWidth: 1.4)
+        shape(ctx, ellipse(c.x, c.y, 5 - k * 0.8, 5), i % 2 == 0 ? hair : hairDark, lineWidth: 1.2)
     }
-    shape(ctx, ellipse(end.x, end.y - 3, 3, 3), hex(0x2B2348), lineWidth: 1)
-    shape(ctx, petal(CGPoint(x: end.x, y: end.y - 4), CGPoint(x: end.x - sway * 3, y: end.y - 10), width: 3), hair, lineWidth: 1.4)
+    shape(ctx, ellipse(end.x, end.y - 2.5, 2.4, 2.4), hex(0x2B2348), lineWidth: 0.9)
+    shape(ctx, petal(CGPoint(x: end.x, y: end.y - 3.4), CGPoint(x: end.x - sway * 2, y: end.y - 7.5), width: 2.4), hair, lineWidth: 1.2)
 }
 
 // 紅框綠心的菱形耳環。
@@ -524,20 +520,6 @@ func drawEarring(_ ctx: CGContext, at c: CGPoint) {
                         CGPoint(x: c.x - 2.8, y: c.y)]), gemRed, lineWidth: 1.1)
     shape(ctx, polygon([CGPoint(x: c.x, y: c.y + 1.8), CGPoint(x: c.x + 1.2, y: c.y), CGPoint(x: c.x, y: c.y - 1.8),
                         CGPoint(x: c.x - 1.2, y: c.y)]), gemGreen, stroke: false)
-}
-
-// 從後腦垂到腿邊的兩條紫色長緞帶（頭的座標）。
-func drawRibbons(_ ctx: CGContext, _ p: Pose, fromBack: Bool = false) {
-    let sway = p.ears * 10
-    for (x, side) in [(CGFloat(34), CGFloat(-1)), (CGFloat(70), CGFloat(1))] {
-        let r = CGMutablePath()
-        let start = CGPoint(x: x, y: 50)
-        let end = CGPoint(x: x + side * 3 - sway, y: fromBack ? 14 : 12)
-        r.move(to: start)
-        r.addCurve(to: end, control1: CGPoint(x: x + side * 6, y: 36), control2: CGPoint(x: x - side * 2 - sway * 0.5, y: 24))
-        line(ctx, r, outline, width: 4.2)
-        line(ctx, r, ribbon, width: 2.4)
-    }
 }
 
 // カフ的眼睛：深靛藍虹膜、裡面一圈紅色細環、黃色水滴形瞳孔光點，上眼線粗、眼尾往外勾。
