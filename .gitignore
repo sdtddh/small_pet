@@ -9,3 +9,7 @@ xcuserdata/
 
 # Built app (rebuild with ./make-app.sh)
 SmallPet.app/
+
+# Krita 原始檔與自動存檔
+*.kra
+*.kra~

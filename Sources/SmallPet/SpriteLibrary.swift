@@ -3,10 +3,12 @@
 // 每一層的所有動作、所有格拼成一張 sprite sheet（<層>.png），manifest 的 sheet 記下怎麼切。
 // 資料夾結構（<角色> 見 Character.swift）：
 //   Resources/characters/<角色>/manifest.json            動作格數 / 速度、服裝清單、sheet 的切法
-//   Resources/characters/<角色>/body.png                  寵物本體
+//   Resources/characters/<角色>/body.png                  寵物本體（只有沒有 looks 的舊素材才用）
 //   Resources/characters/<角色>/outfits/<服裝id>.png      服裝疊圖（與本體同尺寸、同格數）
 //   Resources/characters/<角色>/looks/hair/<髮型id>/{behind,head}.png  外觀：髮型（有的話會取代 body）
 //   Resources/characters/<角色>/looks/clothes/<衣服id>/{base,top}.png  外觀：衣服
+//   Resources/shared/{outfits,looks}/…                   跟角色無關的圖層，所有角色共用一份；
+//                                                         角色資料夾裡找不到某一層時才來這裡找
 //   Resources/props/<名字>.png                           家具等道具（所有角色共用）
 //
 // manifest 沒有 sheet 的舊素材，還是讀一格一張的 <層>/<動作>_<格>.png（或 .pdf）。
@@ -186,8 +188,11 @@ final class SpriteLibrary {
 
     private func sheetImage(_ folder: String) -> CGImage? {
         if let cached = sheets[folder] { return cached }
-        let url = root.appendingPathComponent("\(folder).png")
-        let image = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
+        // 先找角色自己的資料夾，沒有再找所有角色共用的 Resources/shared
+        let image = [root, shared.appendingPathComponent("shared")].lazy
+            .map { $0.appendingPathComponent("\(folder).png") }
+            .compactMap { CGImageSourceCreateWithURL($0 as CFURL, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) } }
+            .first
         sheets[folder] = .some(image)
         return image
     }

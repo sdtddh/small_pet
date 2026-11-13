@@ -5,6 +5,7 @@
 //     swift Tools/generate-bunny.swift rim        # 理芽
 //
 // 角色的本體、服裝、manifest.json 寫到 Sources/SmallPet/Resources/characters/<角色>/，
+// 跟角色無關的服裝 / 髮型 / 衣服圖層寫到 Resources/shared/（見 isShared），
 // 家具等道具圖寫到 Resources/props/（所有角色共用）。
 //
 // 做法跟小貓版一樣：每個動作的每一格是一組「姿勢」(Pose)，本體和服裝用
@@ -2491,16 +2492,48 @@ func renderPNG(width: CGFloat = canvas, height: CGFloat = canvas, offset: CGFloa
 }
 
 let fm = FileManager.default
-// 先清掉舊圖（舊的一格一張圖、已經刪掉的服裝）。LOOK_PREVIEW 只重畫幾格，要沿用舊的 sprite sheet，不清。
-if ProcessInfo.processInfo.environment["LOOK_PREVIEW"] == nil {
-    for dir in ["body", "outfits", "looks"] {
-        try? fm.removeItem(at: outputRoot.appendingPathComponent(dir))
+
+// 跟角色無關的圖層只存一份，放在 Resources/shared/（App 在角色資料夾找不到時會去那裡找）。
+// 跟角色有關的：
+//   - 用 cutOutBody 挖掉她身體的服裝（挖的是這個角色的輪廓，例如兔耳）
+//   - original 髮型 / 衣服（顏色跟著角色）
+//   - 髮型的 head 層（裡面還畫了臉、眼睛、兔耳）
+let sharedRoot = resourcesRoot.appendingPathComponent("shared")
+let characterOutfits: Set<String> = ["umbrella", "wings", "vip_wings"]
+
+func isShared(_ relative: String) -> Bool {
+    let parts = relative.split(separator: "/").map(String.init)
+    switch parts.first {
+    case "outfits":
+        return parts.count > 1 && !characterOutfits.contains(parts[1].replacingOccurrences(of: ".png", with: ""))
+    case "looks":
+        // looks/hair/<id>/behind.png、looks/clothes/<id>/{base,top}.png
+        guard parts.count == 4, parts[2] != "original" else { return false }
+        return parts[1] == "clothes" || parts[3] == "behind.png"
+    default:
+        return false
     }
 }
 
+// 先清掉舊圖（舊的一格一張圖、已經刪掉的服裝、不再產生的 body）。共用的圖每個角色都會重新產生一次，一起清。
+// LOOK_PREVIEW 只重畫幾格，要沿用舊的 sprite sheet，不清。
+if ProcessInfo.processInfo.environment["LOOK_PREVIEW"] == nil {
+    for dir in ["body", "body.png", "outfits", "looks"] {
+        try? fm.removeItem(at: outputRoot.appendingPathComponent(dir))
+    }
+    for dir in ["outfits", "looks"] {
+        try? fm.removeItem(at: sharedRoot.appendingPathComponent(dir))
+    }
+}
+
+func outputURL(_ relative: String) -> URL {
+    // props/ 是所有角色共用的道具，放在 Resources/props；共用圖層放 Resources/shared；其他放在角色自己的資料夾。
+    if relative.hasPrefix("props/") { return resourcesRoot.appendingPathComponent(relative) }
+    return (isShared(relative) ? sharedRoot : outputRoot).appendingPathComponent(relative)
+}
+
 func write(_ data: Data, _ relative: String) throws {
-    // props/ 是所有角色共用的，放在 Resources/props；其他放在角色自己的資料夾。
-    let url = (relative.hasPrefix("props/") ? resourcesRoot : outputRoot).appendingPathComponent(relative)
+    let url = outputURL(relative)
     try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try data.write(to: url)
 }
@@ -2542,7 +2575,7 @@ func writeSheets() throws {
             CGRect(x: (k % sheetColumns) * sheetCell, y: h - (k / sheetColumns + 1) * sheetCell, width: sheetCell, height: sheetCell)
         }
         if frames.count < sheetTotal,
-           let old = (try? Data(contentsOf: outputRoot.appendingPathComponent("\(folder).png"))).flatMap(decodeImage),
+           let old = (try? Data(contentsOf: outputURL("\(folder).png"))).flatMap(decodeImage),
            old.width == w, old.height == h {
             ctx.draw(old, in: CGRect(x: 0, y: 0, width: w, height: h))
         }
@@ -2565,8 +2598,7 @@ for spec in actions where previewFrames == nil {
         var p = pose(spec.name, i, spec.frames)
         p.frame = i
         p.frameCount = spec.frames
-        addFrame(renderPNG { drawBody($0, p) }, "body", spec.name, i)
-        count += 1
+        // 完整的本體（body.png）不再輸出：App 用的是下面的髮型 / 衣服圖層
         for outfit in outfits {
             addFrame(renderPNG { outfit.draw($0, p) }, "outfits/\(outfit.id)", spec.name, i)
             count += 1
