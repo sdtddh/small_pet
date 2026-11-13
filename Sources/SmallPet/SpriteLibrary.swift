@@ -37,7 +37,6 @@ struct Manifest {
         let power: Int?       // 戰鬥力加成（舊素材沒有這欄就當 0）
         let dungeon: Bool?    // true：要從地下城拿到才能穿
         let behind: Bool?     // true：畫在她身後（翅膀），正面時要疊在本體下面
-        let behindActions: [String]?  // 這些動作時也疊在本體下面（撐傘飄下來時的傘柄）
         let origin: String?   // 原本屬於哪個角色（兔耳是阿米婭的），衣櫃顯示成「兔耳（阿米婭）」
         let colorFromHair: Bool?      // 用髮色畫：每種髮型各一張圖 items/<id>/<髮型id>.png
         // 錨點：只畫一張圖（outfits/<id>/front.png、back.png），每一格依 anchors.json 的矩陣跟著頭 / 上半身 / 手移動。
@@ -227,11 +226,10 @@ final class SpriteLibrary {
         manifest.backFrames?[action.rawValue]?.contains(frame) ?? false
     }
 
-    // 這件服裝這一格要不要疊在本體下面（翅膀在正面時是在身後的；撐傘時傘柄在頭後面）。
+    // 這件服裝這一格要不要疊在本體下面（翅膀在正面時是在身後的）。
     func isBehind(_ outfitID: String, _ action: PetAction, _ frame: Int) -> Bool {
         guard let outfit = manifest.outfits.first(where: { $0.id == outfitID }) else { return false }
-        return (outfit.behind == true && !isBackView(action, frame))
-            || outfit.behindActions?.contains(action.rawValue) == true
+        return outfit.behind == true && !isBackView(action, frame)
     }
 
     private func lookFrame(_ folder: String, _ action: PetAction, _ frame: Int) -> NSImage? {

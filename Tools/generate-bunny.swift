@@ -127,12 +127,11 @@ struct Pose {
     var back = false                // 轉過身，背對畫面（跳舞時扭屁股用）
     var tail: CGFloat = 0           // 背面時兔尾巴的左右擺動
     var straps = false              // 抓著降落傘的繩子（繩子一路畫到畫布頂端）
-    var parasol = false             // 撐著雨傘飄下來（拿雨傘時代替降落傘；傘柄一路畫到畫布頂端）
     var armBackReach: CGFloat = 0   // 近的那隻手（畫面左邊）多伸長多少：打電腦時要伸過身體前面碰到鍵盤
     var armFrontReach: CGFloat = 0  // 遠的那隻手多伸長多少
     var carrot = false              // 前手拿著胡蘿蔔，尖端朝嘴巴（吃東西用）
-    var sword = false               // 前手握著劍（地下城打 boss 用）
-    var slash: CGFloat = 0          // 揮劍的刀光：0 沒有，越大越亮
+    var attacking = false           // 在地下城打 boss：衣櫃「作戰武器」那格的東西拿出來揮
+    var slash: CGFloat = 0          // 揮砍的刀光：0 沒有，越大越亮
     var slashFrom: CGFloat = 0      // 刀光從哪個手臂角度劃到現在的角度
     var frame = 0                   // 這是動作的第幾格、一共幾格（會動的服裝用，例如 VIP 翅膀拍動、閃光）
     var frameCount = 1
@@ -338,8 +337,8 @@ func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
             if raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack, reach: p.armBackReach) }
         }
 
-        // 劍（和刀光）永遠在最前面，看起來握在手裡
-        if p.sword { withState(ctx, upper(p)) { drawSword(ctx, p) } }
+        // 揮砍的刀光（武器本身是「作戰武器」的服裝圖層，疊在本體上面）
+        if p.slash > 0 { withState(ctx, upper(p)) { drawSlash(ctx, p) } }
 
         // 睡覺的 z
         for i in 0..<p.zzz {
@@ -820,88 +819,20 @@ let outfitPower: [String: Int] = [
     "cap": 3, "party_hat": 2, "glasses": 2, "sunglasses": 4, "scarf": 3, "bowtie": 2,
     "straw_hat": 5, "witch_hat": 9, "cape": 8, "crown": 14, "ribbon": 11,
     "flower_crown": 3, "headphones": 2, "goggles": 4, "heart_glasses": 2, "bell_collar": 2,
-    "balloon": 1, "lollipop": 2, "umbrella": 4, "backpack": 3, "wings": 6, "vip_wings": 20,
+    "balloon": 1, "lollipop": 2, "sword": 5, "branch": 0, "umbrella": 4, "backpack": 3, "wings": 6, "vip_wings": 20,
 ]
 // 只能從地下城拿到的服裝（還沒拿到前不會出現在衣櫃）。
 let dungeonOutfits: Set<String> = [
-    "straw_hat", "balloon", "bell_collar",          // 草原
-    "witch_hat", "cape", "goggles", "backpack",     // 森林
-    "crown", "ribbon", "wings",                     // 城堡
+    "straw_hat", "balloon", "bell_collar", "lollipop",          // 草原
+    "witch_hat", "cape", "goggles", "backpack", "umbrella",     // 森林
+    "crown", "ribbon", "wings", "sword",                        // 城堡
     "vip_wings",                                    // 星空神殿
 ]
 
-// 哥德雨傘的顏色與撐開的傘面（降落時用的道具圖）。
+// 哥德雨傘的顏色。
 let umbrellaBlack = hex(0x1E1A24), umbrellaShade = hex(0x3A2D4A), umbrellaWine = hex(0x9B2242)
 let umbrellaLace = hex(0xF1ECF4), umbrellaShaft = hex(0x9A95A6)
 
-// 撐開的傘（哥德蘿莉的鐘形洋傘）：c 是傘面下緣的中心，r 半徑、dome 高度。
-// 黑 / 深紫相間的六片傘面，下緣一圈白蕾絲，傘骨尖端掛酒紅小珠，傘頂蝴蝶結 + 尖頂。
-func drawOpenUmbrella(_ ctx: CGContext, rim c: CGPoint, radius r: CGFloat, dome: CGFloat) {
-    let n = 6
-    let tip = pt(c.x, c.y + dome)
-    // 傘骨尖端：中間的比兩端低一點，看起來有弧度
-    let ribs = (0...n).map { k -> CGPoint in
-        let f = CGFloat(k) / CGFloat(n)
-        return pt(c.x - r + r * 2 * f, c.y - 3 * sin(.pi * f))
-    }
-    func edge(_ k: Int, _ f: CGFloat) -> CGPoint {   // 第 k 片下緣上的點（兩根傘骨之間往上拱）
-        let a = ribs[k], b = ribs[k + 1], m = pt((a.x + b.x) / 2, (a.y + b.y) / 2 + 4)
-        return lerp(lerp(a, m, f), lerp(m, b, f), f)
-    }
-    // 白蕾絲：沿著下緣一顆顆小圓，傘面蓋住上半
-    for k in 0..<n {
-        for j in 0...4 {
-            let q = edge(k, CGFloat(j) / 4)
-            shape(ctx, ellipse(q.x, q.y - 0.6, 3.6, 3.6), umbrellaLace, lineWidth: 0.8)
-        }
-    }
-    // 鐘形傘面：下襬外張、往上收成尖頂
-    let canopy = CGMutablePath()
-    canopy.move(to: ribs[0])
-    canopy.addCurve(to: tip, control1: pt(c.x - r * 0.78, c.y + dome * 0.5), control2: pt(c.x - r * 0.2, c.y + dome * 0.62))
-    canopy.addCurve(to: ribs[n], control1: pt(c.x + r * 0.2, c.y + dome * 0.62), control2: pt(c.x + r * 0.78, c.y + dome * 0.5))
-    for k in stride(from: n - 1, through: 0, by: -1) {
-        let a = ribs[k + 1], b = ribs[k]
-        canopy.addQuadCurve(to: b, control: pt((a.x + b.x) / 2, (a.y + b.y) / 2 + 4))
-    }
-    canopy.closeSubpath()
-    shape(ctx, canopy, umbrellaBlack, stroke: false)
-    func rib(_ k: Int) -> CGPath {
-        quad(tip, ribs[k], pt(c.x + (ribs[k].x - c.x) * 0.72, c.y + dome * 0.62))
-    }
-    // 隔一片塗深紫
-    clipped(ctx, to: canopy) {
-        for k in stride(from: 1, to: n, by: 2) {
-            let panel = CGMutablePath()
-            panel.addPath(rib(k))
-            panel.addLine(to: pt(ribs[k].x, c.y - 8)); panel.addLine(to: pt(ribs[k + 1].x, c.y - 8)); panel.addLine(to: ribs[k + 1])
-            panel.addQuadCurve(to: tip, control: pt(c.x + (ribs[k + 1].x - c.x) * 0.72, c.y + dome * 0.62))
-            panel.closeSubpath()
-            shape(ctx, panel, umbrellaShade, stroke: false)
-        }
-        shape(ctx, ellipse(c.x - r * 0.42, c.y + dome * 0.42, r * 0.34, 4), hex(0xFFFFFF, 0.16), stroke: false)   // 光澤
-    }
-    for k in 1..<n { line(ctx, rib(k), outline, width: 1) }
-    ctx.addPath(canopy); ctx.setStrokeColor(outline); ctx.setLineWidth(2); ctx.strokePath()
-    for q in ribs { shape(ctx, ellipse(q.x, q.y - 1, 3, 3), umbrellaWine, lineWidth: 0.9) }   // 傘骨尖端的小珠
-    // 傘頂：尖頂 + 銀珠 + 酒紅蝴蝶結
-    line(ctx, segment(tip, pt(tip.x, tip.y + 7)), outline, width: 2.2)
-    line(ctx, segment(pt(tip.x, tip.y + 1), pt(tip.x, tip.y + 6.5)), umbrellaShaft, width: 0.9)
-    shape(ctx, ellipse(tip.x, tip.y + 8, 3, 3), umbrellaShaft, lineWidth: 0.9)
-    drawBow(ctx, at: pt(tip.x, tip.y + 0.5), size: 2.6, umbrellaWine)
-}
-
-// 撐傘飄下來時，傘柄在寵物畫布頂端的 x（設計座標，就是舉起的前手正上方）。
-let parasolX: CGFloat = 70
-
-// 道具圖：撐開的雨傘，傘柄從畫布底部往上接到傘面（跟寵物圖裡的傘柄接起來）。
-// 道具圖不加 offsetX，所以這裡要自己加上。
-func drawUmbrellaProp(_ ctx: CGContext) {
-    let c = pt(parasolX + offsetX, 32)
-    line(ctx, segment(pt(c.x, -2), pt(c.x, c.y + 6)), outline, width: 2.6)
-    line(ctx, segment(pt(c.x, -2), pt(c.x, c.y + 6)), umbrellaShaft, width: 1.2)
-    drawOpenUmbrella(ctx, rim: c, radius: 29, dome: 30)
-}
 
 let outfits: [Outfit] = [
     Outfit(id: "cap", name: "棒球帽", slot: "head") { ctx, p in
@@ -1198,8 +1129,18 @@ let outfits: [Outfit] = [
         }
     },
 
-    // ── 手上（拿在前手，吃東西時手上是胡蘿蔔，就先收起來）──
+    // ── 作戰武器（slot "hand"，拿在前手；App 只在地下城打 boss 時顯示，衣櫃預覽也看得到）──
 
+    // 樹枝：一開始就有（戰力 +0）。作戰武器不能空著，沒拿東西時 App 會讓她拿樹枝。
+    Outfit(id: "branch", name: "樹枝", slot: "hand") { ctx, p in
+        guard !p.carrot else { return }
+        withState(ctx, upper(p)) { drawBranch(ctx, p) }
+    },
+    // 劍（城堡掉落）：平常順著手臂斜拿著，打 boss 時跟著手揮。
+    Outfit(id: "sword", name: "劍", slot: "hand") { ctx, p in
+        guard !p.carrot else { return }
+        withState(ctx, upper(p)) { drawSword(ctx, p) }
+    },
     Outfit(id: "balloon", name: "氣球", slot: "hand") { ctx, p in
         guard !p.carrot else { return }
         withState(ctx, upper(p)) {
@@ -1221,7 +1162,12 @@ let outfits: [Outfit] = [
         guard !p.carrot else { return }
         withState(ctx, upper(p)) {
             let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
-            let top = CGPoint(x: h.x + 2, y: h.y + 13)
+            // 平常直直拿著；打 boss 時糖果朝外、順著手臂揮
+            var top = CGPoint(x: h.x + 2, y: h.y + 13)
+            if p.attacking {
+                let a = swordAngle(p.armFront)
+                top = CGPoint(x: h.x + sin(a) * 15, y: h.y - cos(a) * 15 - 3)
+            }
             line(ctx, segment(h, top), outline, width: 3.2)
             line(ctx, segment(h, top), white, width: 1.8)
             shape(ctx, ellipse(top.x, top.y + 3, 13, 13), hex(0xFF8FB1))
@@ -1238,23 +1184,9 @@ let outfits: [Outfit] = [
         }
     },
 
-    // 哥德雨傘：平常收起來拿在手上（順著手臂方向）；從高處掉下來時撐開代替降落傘，
-    // 撐開的傘面是獨立道具圖 props/umbrella_open.png，這裡只畫從手伸到畫布頂端的傘柄。
+    // 哥德雨傘：收起來拿在手上（順著手臂方向），打 boss 時拿來當劍揮。
     Outfit(id: "umbrella", name: "哥德雨傘", slot: "hand") { ctx, p in
         guard !p.carrot else { return }
-        if p.parasol {
-            // 傘柄從手直直往上，在 x = parasolX 跟道具圖的傘柄接起來（App 會讓道具圖跟著她轉向翻面）
-            let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach).applying(upperTransform(p))
-            let top = pt(parasolX, canvas + 2)
-            line(ctx, segment(h, top), outline, width: 2.6)
-            line(ctx, segment(h, top), umbrellaShaft, width: 1.2)
-            // 手下面的酒紅彎鉤握把
-            let hook = quad(pt(h.x, h.y - 2), pt(h.x + 5, h.y - 5), pt(h.x + 1.5, h.y - 10))
-            line(ctx, hook, outline, width: 3.2)
-            line(ctx, hook, umbrellaWine, width: 1.7)
-            // 傘柄在頭和身體後面、手（本體）蓋在上面像握著：parasol 這個動作 App 會把它疊在本體下面（behindActions）
-            return
-        }
         withState(ctx, upper(p)) {
             let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
             let a = p.armFront + 0.6                             // 順著手臂再往前斜一點，傘尖才不會插進腳裡
@@ -2082,14 +2014,12 @@ let actions: [ActionSpec] = [
     ActionSpec(name: "dragged", frames: 2, fps: 5, loop: true),
     ActionSpec(name: "dance", frames: 16, fps: 8, loop: true),
     ActionSpec(name: "parachute", frames: 4, fps: 4, loop: true),
-    // 拿著雨傘時代替降落傘：單手撐傘飄下來（格數、速度要跟 parachute 一樣）
-    ActionSpec(name: "parasol", frames: 4, fps: 4, loop: true),
     ActionSpec(name: "eat", frames: 4, fps: 5, loop: true),
     ActionSpec(name: "typing", frames: 4, fps: 6, loop: true),
     // 一格是擺盪的四分之一週期，要跟程式裡的 swingPeriod（2.4 秒）對上
     ActionSpec(name: "swing", frames: 4, fps: 4 / 2.4, loop: true),
     ActionSpec(name: "fly", frames: 2, fps: 4, loop: true),
-    // 在地下城拿劍砍 boss：一刀 6 格，第 3 格砍中（程式在這格讓 boss 閃一下）
+    // 在地下城拿作戰武器砍 boss：一刀 6 格，第 3 格砍中（程式在這格讓 boss 閃一下）
     ActionSpec(name: "attack", frames: 6, fps: 9, loop: true),
 ]
 
@@ -2233,7 +2163,7 @@ func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
         p.mouthOpen = i == 1
     case "attack":
         // 0 準備、1 舉劍、2 揮下、3 砍中、4 收勢、5 站穩
-        p.sword = true
+        p.attacking = true
         p.armBack = 0.55
         p.eyes = .open
         switch i {
@@ -2255,16 +2185,6 @@ func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
         default:
             p.armFront = 0.95; p.lean = 0.06; p.frontFoot = CGPoint(x: 4, y: 0); p.ears = 0.15
         }
-    case "parasol":
-        // 單手撐傘飄下來：前手舉高握傘柄，後手跟腳輕輕晃
-        p.parasol = true
-        p.bodyY = 2
-        p.lean = 0.05 * sin(t)
-        p.armFront = 2.35; p.armBack = -0.5 + 0.25 * sin(t)
-        p.frontFoot = CGPoint(x: 2 * sin(t), y: 2)
-        p.backFoot = CGPoint(x: -2 * sin(t), y: 3)
-        p.ears = 0.12 * sin(t)
-        p.eyes = i == 2 ? .happy : .open
     case "parachute":
         // 吊在傘下：雙手抓繩、腳懸空晃來晃去
         p.straps = true
@@ -2642,15 +2562,14 @@ func drawPlane(_ ctx: CGContext, _ part: PlanePart) {
     shape(ctx, ellipse(162, 22, 7, 9), planeDark, lineWidth: 1.6)
 }
 
-// MARK: - 劍（地下城打 boss）
+// MARK: - 劍與刀光（地下城打 boss）
 
-// 劍的方向：順著手臂再往上翹一點，舉劍時指向後上方、砍下去時指向前方。
+// 武器的方向：順著手臂再往上翹一點，舉起時指向後上方、砍下去時指向前方。
 func swordAngle(_ armAngle: CGFloat) -> CGFloat { armAngle + 0.5 }
 
-func drawSword(_ ctx: CGContext, _ p: Pose) {
-    let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
-    // 刀光：從舉劍的角度劃到現在的角度，一道彎彎的光
-    if p.slash > 0 {
+// 刀光：從舉起的角度劃到現在的角度，一道彎彎的光（不管手上拿什麼都有）
+func drawSlash(_ ctx: CGContext, _ p: Pose) {
+    do {
         let s = shoulderFront
         let r: CGFloat = 38
         let a0 = swordAngle(p.slashFrom), a1 = swordAngle(p.armFront)
@@ -2670,7 +2589,12 @@ func drawSword(_ ctx: CGContext, _ p: Pose) {
         line(ctx, arc, hex(0xFFFFFF, 0.9 * p.slash), width: 3)
         ctx.restoreGState()
     }
-    let a = swordAngle(p.armFront)
+}
+
+// 劍（衣櫃「作戰武器」的劍）：握在前手。打 boss 時順著手臂揮；其他姿勢（衣櫃預覽）往前斜斜拿著，劍尖才不會戳出畫布底下。
+func drawSword(_ ctx: CGContext, _ p: Pose) {
+    let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
+    let a = p.attacking ? swordAngle(p.armFront) : p.armFront + 1.0
     let d = CGPoint(x: sin(a), y: -cos(a))
     let n = CGPoint(x: -d.y, y: d.x)
     func at(_ k: CGFloat, _ side: CGFloat = 0) -> CGPoint {
@@ -2687,6 +2611,37 @@ func drawSword(_ ctx: CGContext, _ p: Pose) {
     line(ctx, segment(at(3, -5), at(3, 5)), outline, width: 4)
     line(ctx, segment(at(3, -5), at(3, 5)), hex(0xF2C94C), width: 2.2)
     // 手蓋在劍柄上，看起來握住了
+    shape(ctx, ellipse(h.x, h.y, 7.5, 7.5), white, lineWidth: 1.8)
+}
+
+// 樹枝（一開始就有的作戰武器）：微彎的細枝，中間岔出一小枝、掛一片葉子。拿法跟劍一樣。
+func drawBranch(_ ctx: CGContext, _ p: Pose) {
+    let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
+    let a = p.attacking ? swordAngle(p.armFront) : p.armFront + 1.0
+    let d = CGPoint(x: sin(a), y: -cos(a))
+    let n = CGPoint(x: -d.y, y: d.x)
+    func at(_ k: CGFloat, _ side: CGFloat = 0) -> CGPoint {
+        CGPoint(x: h.x + d.x * k + n.x * side, y: h.y + d.y * k + n.y * side)
+    }
+    let bark = hex(0x9A6A43), leaf = hex(0x7CC46A)
+    ctx.setLineCap(.round)
+    let stick = quad(at(-3), at(25, 0.5), at(12, 2.2))
+    line(ctx, stick, outline, width: 4.6)
+    line(ctx, stick, bark, width: 2.6)
+    // 岔出去的小枝
+    let twig = quad(at(13, 1.8), at(19, 6.5), at(16, 3.2))
+    line(ctx, twig, outline, width: 3.2)
+    line(ctx, twig, bark, width: 1.4)
+    // 小枝尖端的葉子
+    let base = at(19, 6.5), tip = at(25, 9.5)
+    let leafPath = CGMutablePath()
+    leafPath.move(to: base)
+    leafPath.addQuadCurve(to: tip, control: at(20, 10.5))
+    leafPath.addQuadCurve(to: base, control: at(24.5, 5.8))
+    leafPath.closeSubpath()
+    shape(ctx, leafPath, leaf, lineWidth: 1.2)
+    line(ctx, segment(base, at(23.5, 8.6)), hex(0x4E9A45), width: 0.7)
+    // 手蓋在樹枝上，看起來握住了
     shape(ctx, ellipse(h.x, h.y, 7.5, 7.5), white, lineWidth: 1.8)
 }
 
@@ -3137,9 +3092,8 @@ let outfitAnchors: [String: String] = [
     "witch_hat": "head", "crown": "head", "ribbon": "head", "flower_crown": "head", "headphones": "head",
     "goggles": "head", "heart_glasses": "head",
     "scarf": "upper", "bowtie": "upper", "cape": "upper", "bell_collar": "upper", "backpack": "upper",
-    "lollipop": "hand",
 ]
-// 氣球的線從手拉到固定的氣球、雨傘跟著手臂角度轉、翅膀會張開 / 拍動、要挖掉身體，這些還是逐格畫。
+// 氣球的線從手拉到固定的氣球、劍 / 雨傘 / 棒棒糖跟著手臂角度轉（打 boss 時是武器）、翅膀會張開 / 拍動、要挖掉身體，這些還是逐格畫。
 
 let restPose = Pose()   // 靜止姿勢：上半身、頭的矩陣都是單位矩陣
 
@@ -3218,7 +3172,6 @@ if previewFrames == nil || ProcessInfo.processInfo.environment["BOSS_PREVIEW"] !
 }
 if previewFrames == nil {
 try write(renderPNG(height: canopyHeight, offset: 0) { drawCanopy($0) }, "props/parachute.png")
-try write(renderPNG(height: canopyHeight, offset: 0) { drawUmbrellaProp($0) }, "props/umbrella_open.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: false) }, "props/dining.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: true) }, "props/dining_meal.png")
 try write(renderPNG(width: computerWidth, height: computerHeight) { drawComputer($0, on: false) }, "props/computer.png")
@@ -3275,18 +3228,16 @@ try writeSheets()
 
 // 畫在她身後的服裝：正面時 App 把它們疊在身體下面，長髮才會蓋在翅膀前面。
 let behindOutfits: Set<String> = ["wings", "vip_wings"]
-// 只有某些動作才疊在身體下面的服裝（撐傘飄下來時，傘柄在頭和身體後面）。
-let behindActions: [String: [String]] = ["umbrella": ["parasol"]]
 
 // shared/items.json：所有角色共用的清單——部位、服裝、角色特徵物件、髮型、衣服。
 let catalog: [String: Any] = [
-    // 疊圖順序：前面的在下面。背後的東西最先畫，手上拿的最後畫
+    // 疊圖順序：前面的在下面。背後的東西最先畫，作戰武器最後畫
     "slots": [
         ["id": "back", "name": "背後"],
         ["id": "neck", "name": "脖子"],
         ["id": "face", "name": "臉"],
         ["id": "head", "name": "頭"],
-        ["id": "hand", "name": "手上"],
+        ["id": "hand", "name": "作戰武器"],
     ],
     // 畫在本體圖層之間的部位（尾巴、耳朵、耳飾），跟 slots 不同，不是疊在最上面
     "bodySlots": [
@@ -3297,7 +3248,7 @@ let catalog: [String: Any] = [
     "outfits": outfits.map {
         ["id": $0.id, "name": $0.name, "slot": $0.slot,
          "power": outfitPower[$0.id] ?? 0, "dungeon": dungeonOutfits.contains($0.id),
-         "behind": behindOutfits.contains($0.id), "behindActions": behindActions[$0.id] ?? [],
+         "behind": behindOutfits.contains($0.id),
          "anchor": outfitAnchors[$0.id] as Any? ?? NSNull()] as [String: Any]
     } + bodyItems.map {
         ["id": $0.id, "name": $0.name, "slot": $0.slot, "power": 0, "dungeon": false, "behind": false,

@@ -45,11 +45,6 @@
       "frames" : 4,
       "loop" : true
     },
-    "parasol" : {
-      "fps" : 4,
-      "frames" : 4,
-      "loop" : true
-    },
     "run" : {
       "fps" : 16,
       "frames" : 6,
@@ -100,21 +95,20 @@
     "cell" : 224,
     "columns" : 8,
     "start" : {
-      "attack" : 66,
+      "attack" : 62,
       "dance" : 28,
       "dragged" : 26,
-      "eat" : 52,
+      "eat" : 48,
       "fall" : 24,
-      "fly" : 64,
+      "fly" : 60,
       "idle" : 0,
       "jump" : 16,
       "parachute" : 44,
-      "parasol" : 48,
       "run" : 10,
       "sit" : 20,
       "sleep" : 22,
-      "swing" : 60,
-      "typing" : 56,
+      "swing" : 56,
+      "typing" : 52,
       "walk" : 4
     }
   }

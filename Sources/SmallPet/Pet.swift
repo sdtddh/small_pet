@@ -36,9 +36,6 @@ final class Pet {
     let window: PetWindow
     let view: PetView
     private let canopy: CanopyWindow
-    private let umbrellaCanopy: CanopyWindow   // 拿著雨傘時用撐開的雨傘代替降落傘
-    // 手上拿著雨傘（由 AppDelegate 依衣櫃設定）。
-    var holdsUmbrella = false
     let speech: PetSpeech
     private let sprites: SpriteLibrary
     private let size: NSSize
@@ -134,7 +131,6 @@ final class Pet {
         window = PetWindow(size: size)
         view = PetView(frame: NSRect(origin: .zero, size: size), sprites: sprites)
         canopy = CanopyWindow(image: sprites.prop("parachute"), width: size.width)
-        umbrellaCanopy = CanopyWindow(image: sprites.prop("umbrella_open"), width: size.width)
         window.contentView = view
         window.isMovableByWindowBackground = false
 
@@ -238,7 +234,6 @@ final class Pet {
 
     private func closeCanopies() {
         canopy.setOpen(false, above: window.frame)
-        umbrellaCanopy.setOpen(false, above: window.frame)
     }
 
     // 回家：從隨機一側的螢幕外跑進來，跑進畫面後呼叫 done。
@@ -393,18 +388,15 @@ final class Pet {
         }
 
         view.facingLeft = direction < 0
-        let umbrella = action == .parachute && holdsUmbrella
         let frame = currentFrame()
-        view.show(umbrella ? .parasol : action, frame: frame)
+        view.show(action, frame: frame)
         // 砍中的那一格：通知 boss 被砍
         if action == .attack {
             if frame == Self.attackImpactFrame, lastAttackFrame != frame { onAttackHit?() }
             lastAttackFrame = frame
         }
         window.setFrameOrigin(NSPoint(x: posX, y: posY))
-        canopy.setOpen(action == .parachute && !umbrella, above: window.frame)
-        umbrellaCanopy.setFlipped(direction < 0)
-        umbrellaCanopy.setOpen(umbrella, above: window.frame)
+        canopy.setOpen(action == .parachute, above: window.frame)
         speech.follow(window.frame)
     }
 

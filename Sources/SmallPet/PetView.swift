@@ -101,7 +101,8 @@ final class PetView: NSView {
             // 視窗不是 112 點大時，矩陣的位移要跟著縮放
             let k = bounds.width / sprites.canvasSize.width
             for (slot, layer) in outfitLayers {
-                let id = outfits[slot]
+                // 作戰武器（hand）只有在地下城打 boss 時才拿出來
+                let id = slot == "hand" && action != .attack ? nil : outfits[slot]
                 if let outfit = id.flatMap(sprites.outfit), outfit.anchor != nil {
                     // 只畫一張的服裝（帽子、眼鏡…）：套上這一格的矩陣，跟著頭 / 上半身 / 手動
                     let shown = sprites.anchored(outfit, action, shownFrame)

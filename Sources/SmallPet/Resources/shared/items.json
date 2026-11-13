@@ -98,9 +98,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : false,
       "id" : "cap",
       "name" : "棒球帽",
@@ -110,9 +107,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : false,
       "id" : "party_hat",
       "name" : "派對帽",
@@ -122,9 +116,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : false,
       "id" : "glasses",
       "name" : "圓框眼鏡",
@@ -134,9 +125,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : false,
       "id" : "sunglasses",
       "name" : "墨鏡",
@@ -146,9 +134,6 @@
     {
       "anchor" : "upper",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : false,
       "id" : "scarf",
       "name" : "圍巾",
@@ -158,9 +143,6 @@
     {
       "anchor" : "upper",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : false,
       "id" : "bowtie",
       "name" : "領結",
@@ -170,9 +152,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : true,
       "id" : "straw_hat",
       "name" : "草帽",
@@ -182,9 +161,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : true,
       "id" : "witch_hat",
       "name" : "魔法帽",
@@ -194,9 +170,6 @@
     {
       "anchor" : "upper",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : true,
       "id" : "cape",
       "name" : "披風",
@@ -206,9 +179,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : true,
       "id" : "crown",
       "name" : "王冠",
@@ -218,9 +188,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : true,
       "id" : "ribbon",
       "name" : "蝴蝶結",
@@ -230,9 +197,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : false,
       "id" : "flower_crown",
       "name" : "花冠",
@@ -242,9 +206,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : false,
       "id" : "headphones",
       "name" : "耳機",
@@ -254,9 +215,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : true,
       "id" : "goggles",
       "name" : "飛行護目鏡",
@@ -266,9 +224,6 @@
     {
       "anchor" : "head",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : false,
       "id" : "heart_glasses",
       "name" : "愛心眼鏡",
@@ -278,9 +233,6 @@
     {
       "anchor" : "upper",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : true,
       "id" : "bell_collar",
       "name" : "鈴鐺項圈",
@@ -290,9 +242,24 @@
     {
       "anchor" : null,
       "behind" : false,
-      "behindActions" : [
-
-      ],
+      "dungeon" : false,
+      "id" : "branch",
+      "name" : "樹枝",
+      "power" : 0,
+      "slot" : "hand"
+    },
+    {
+      "anchor" : null,
+      "behind" : false,
+      "dungeon" : true,
+      "id" : "sword",
+      "name" : "劍",
+      "power" : 5,
+      "slot" : "hand"
+    },
+    {
+      "anchor" : null,
+      "behind" : false,
       "dungeon" : true,
       "id" : "balloon",
       "name" : "氣球",
@@ -300,12 +267,9 @@
       "slot" : "hand"
     },
     {
-      "anchor" : "hand",
+      "anchor" : null,
       "behind" : false,
-      "behindActions" : [
-
-      ],
-      "dungeon" : false,
+      "dungeon" : true,
       "id" : "lollipop",
       "name" : "棒棒糖",
       "power" : 2,
@@ -314,10 +278,7 @@
     {
       "anchor" : null,
       "behind" : false,
-      "behindActions" : [
-        "parasol"
-      ],
-      "dungeon" : false,
+      "dungeon" : true,
       "id" : "umbrella",
       "name" : "哥德雨傘",
       "power" : 4,
@@ -326,9 +287,6 @@
     {
       "anchor" : "upper",
       "behind" : false,
-      "behindActions" : [
-
-      ],
       "dungeon" : true,
       "id" : "backpack",
       "name" : "小書包",
@@ -338,9 +296,6 @@
     {
       "anchor" : null,
       "behind" : true,
-      "behindActions" : [
-
-      ],
       "dungeon" : true,
       "id" : "wings",
       "name" : "天使翅膀",
@@ -350,9 +305,6 @@
     {
       "anchor" : null,
       "behind" : true,
-      "behindActions" : [
-
-      ],
       "dungeon" : true,
       "id" : "vip_wings",
       "name" : "VIP 星耀之翼",
@@ -409,7 +361,7 @@
     },
     {
       "id" : "hand",
-      "name" : "手上"
+      "name" : "作戰武器"
     }
   ]
 }

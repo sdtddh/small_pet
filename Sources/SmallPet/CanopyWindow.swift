@@ -24,23 +24,11 @@ final class CanopyWindow: NSWindow {
 
         let view = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         view.wantsLayer = true
-        // 圖片放在子圖層（錨點在中心），翻面時才會以中線為軸
         imageLayer.frame = view.bounds
         imageLayer.contents = image
         imageLayer.contentsGravity = .resizeAspect
         view.layer?.addSublayer(imageLayer)
         contentView = view
-    }
-
-    // 跟著她轉向左右翻面（雨傘不在畫布中線上，要跟寵物圖一起翻才接得上）。
-    func setFlipped(_ flipped: Bool) {
-        let layer = imageLayer
-        let t = flipped ? CATransform3DMakeScale(-1, 1, 1) : CATransform3DIdentity
-        guard !CATransform3DEqualToTransform(layer.transform, t) else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer.transform = t
-        CATransaction.commit()
     }
 
     // 開傘 / 收傘。

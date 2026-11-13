@@ -1,6 +1,6 @@
 // Wardrobe.swift —— 記錄寵物目前穿什麼，並提供「衣櫃」視窗。
 //
-// 每個部位（手上、頭、臉、脖子、背後）同時只能穿一件；選擇會存在 UserDefaults，下次開啟還在。
+// 每個部位（作戰武器、頭、臉、脖子、背後）同時只能穿一件；選擇會存在 UserDefaults，下次開啟還在。
 // 另外還有「外觀」：髮型和衣服，純粹換造型、不加戰鬥力。
 import AppKit
 import SwiftUI
@@ -36,6 +36,11 @@ final class Wardrobe: ObservableObject {
         // 也過濾掉還沒從地下城拿到的服裝。
         let valid = Set(sprites.manifest.outfits.filter { $0.dungeon != true || stats.owns($0.id) }.map(\.id))
         var equipped = saved.filter { valid.contains($0.value) }
+        // 作戰武器不能空著：沒拿東西（第一次開啟、或拿的武器不見了）就拿樹枝
+        if equipped[Self.weaponSlot] == nil, valid.contains(Self.defaultWeapon) {
+            equipped[Self.weaponSlot] = Self.defaultWeapon
+            UserDefaults.standard.set(equipped, forKey: Self.defaultsKey)
+        }
         Self.migrate(&equipped, manifest: sprites.manifest, valid: valid, defaultLook: sprites.defaultLook)
         self.equipped = equipped
 
@@ -86,6 +91,10 @@ final class Wardrobe: ObservableObject {
     func available(in slot: String) -> [Manifest.Outfit] {
         sprites.outfits(in: slot).filter { $0.dungeon != true || stats.owns($0.id) }
     }
+
+    // 作戰武器的部位，和一開始就有的武器。
+    static let weaponSlot = "hand"
+    static let defaultWeapon = "branch"
 
     // 身上服裝的戰鬥力加成總和。
     var powerBonus: Int {
@@ -162,7 +171,7 @@ struct WardrobeView: View {
                         Divider()
                         Text("配件").font(.callout).foregroundStyle(.secondary)
                     }
-                    // 由上往下顯示：手上 → 頭 → 臉 → 脖子 → 背後（manifest 裡是疊圖順序，所以反過來）
+                    // 由上往下顯示：作戰武器 → 頭 → 臉 → 脖子 → 背後（manifest 裡是疊圖順序，所以反過來）
                     ForEach(sprites.manifest.slots.reversed()) { slot in
                         slotRow(slot)
                     }
@@ -221,12 +230,22 @@ struct WardrobeView: View {
 
     private func slotRow(_ slot: Manifest.Slot) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(slot.name).font(.headline)
+            HStack(alignment: .firstTextBaseline) {
+                Text(slot.name).font(.headline)
+                if slot.id == "hand" {
+                    Text("只有在地下城打 boss 時才會拿出來").font(.callout).foregroundStyle(.secondary)
+                }
+            }
             optionGrid {
-                option(name: "無", outfitID: nil, slot: slot.id)
+                // 作戰武器一定要拿一樣（沒有「無」），而且一律標出戰鬥力（樹枝 +0）；其他部位只標有加成的
+                let isWeapon = slot.id == Wardrobe.weaponSlot
+                if !isWeapon {
+                    option(name: "無", outfitID: nil, slot: slot.id)
+                }
                 ForEach(wardrobe.available(in: slot.id)) { outfit in
                     let name = sprites.displayName(outfit)
-                    option(name: outfit.power.map { $0 > 0 ? "\(name) +\($0)" : name } ?? name,
+                    let power = outfit.power ?? 0
+                    option(name: power != 0 || isWeapon ? "\(name) \(power < 0 ? "" : "+")\(power)" : name,
                            outfitID: outfit.id, slot: slot.id)
                 }
             }

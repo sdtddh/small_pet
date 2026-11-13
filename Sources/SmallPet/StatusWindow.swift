@@ -27,7 +27,7 @@ final class StatusWindowController {
     func show() {
         if window == nil {
             let w = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 360, height: 510),
+                contentRect: NSRect(x: 0, y: 0, width: 360, height: 650),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -95,7 +95,7 @@ struct StatusView: View {
                 permissionsTab.tabItem { Text("權限") }.tag(Tab.permissions)
             }
             .padding()
-            .frame(minWidth: 360, minHeight: 510)
+            .frame(minWidth: 360, minHeight: 650)
         }
     }
 
@@ -245,6 +245,7 @@ struct StatusView: View {
                             .foregroundStyle(.secondary)
                         Text("成功率 \(Int((dungeon.successChance(power: stats.power) * 100).rounded()))%")
                             .font(.callout)
+                        lootLine(dungeon)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 6) {
@@ -263,9 +264,35 @@ struct StatusView: View {
             Text("成功可能拿到新服裝或零食；失敗什麼都沒有。「試打」只打 15 秒看看 boss，不算次數、不給戰利品。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)   // 一定要整段換行顯示，不要被截成「…」
             Spacer(minLength: 0)
         }
         .padding(.top, 8)
+    }
+
+    // 這個地下城還剩哪些服裝沒拿到：拿過的顯示名稱，沒拿過的顯示 ???；全拿完就只會掉零食。
+    // 還沒畫好的服裝（素材裡沒有）不算，因為抽到也只會給零食。
+    private func lootLine(_ dungeon: Dungeon) -> some View {
+        let all = wardrobe.sprites.manifest.outfits
+        let outfits = dungeon.loot.compactMap { id in all.first { $0.id == id } }
+        let left = outfits.filter { !stats.owns($0.id) }
+        let names = outfits.enumerated().reduce(Text("")) { text, item in
+            // 拿到過才知道是什麼，還沒掉過的只顯示 ???
+            let owned = stats.owns(item.element.id)
+            let name = Text(owned ? item.element.name : "???")
+                .foregroundColor(owned ? .primary : .secondary)
+            return item.offset == 0 ? name : text + Text("、").foregroundColor(.secondary) + name
+        }
+        // 第一行剩幾件、第二行名稱（擠在同一行時名稱會被拆開換行）
+        let summary = left.isEmpty
+            ? Text("掉落：全收集了，只會掉零食").foregroundColor(.secondary)
+            : Text("掉落：").foregroundColor(.secondary) + Text("還差 \(left.count)/\(outfits.count) 件").foregroundColor(.orange)
+        return VStack(alignment: .leading, spacing: 1) {
+            summary
+            names
+        }
+        .font(.callout)
+            .help("成功時從這些服裝和零食裡抽一樣；抽到已經有的服裝就改給零食")
     }
 
     // MARK: 背包

@@ -42,12 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pet = Pet(sprites: sprites, speech: PetSpeech(resources: sprites.root))
         pet.view.setOutfits(wardrobe.equipped)
         pet.view.setLook(wardrobe.look)
-        pet.holdsUmbrella = wardrobe.equipped["hand"] == "umbrella"
         wardrobe.onChange = { [weak self] in
             guard let self else { return }
             self.pet.view.setOutfits(self.wardrobe.equipped)
             self.pet.view.setLook(self.wardrobe.look)
-            self.pet.holdsUmbrella = self.wardrobe.equipped["hand"] == "umbrella"
             self.stats.outfitBonus = self.wardrobe.powerBonus
             if self.pet.travel == .none { self.pet.speech.say("wardrobe") }
         }
