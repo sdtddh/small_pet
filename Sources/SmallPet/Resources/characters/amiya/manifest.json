@@ -333,6 +333,28 @@
       "slot" : "back"
     }
   ],
+  "sheet" : {
+    "cell" : 224,
+    "columns" : 8,
+    "start" : {
+      "attack" : 66,
+      "dance" : 28,
+      "dragged" : 26,
+      "eat" : 52,
+      "fall" : 24,
+      "fly" : 64,
+      "idle" : 0,
+      "jump" : 16,
+      "parachute" : 44,
+      "parasol" : 48,
+      "run" : 10,
+      "sit" : 20,
+      "sleep" : 22,
+      "swing" : 60,
+      "typing" : 56,
+      "walk" : 4
+    }
+  },
   "slots" : [
     {
       "id" : "back",

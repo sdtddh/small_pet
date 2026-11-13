@@ -1,14 +1,15 @@
 // SpriteLibrary.swift —— 讀取目前角色的 manifest.json 與每一格圖片。
 //
+// 每一層的所有動作、所有格拼成一張 sprite sheet（<層>.png），manifest 的 sheet 記下怎麼切。
 // 資料夾結構（<角色> 見 Character.swift）：
-//   Resources/characters/<角色>/manifest.json            動作格數 / 速度、服裝清單
-//   Resources/characters/<角色>/body/<動作>_<格>.png       寵物本體
-//   Resources/characters/<角色>/outfits/<服裝id>/<動作>_<格>.png   服裝疊圖（與本體同尺寸、同格數）
-//   Resources/characters/<角色>/looks/hair/<髮型id>/{behind,head}/<動作>_<格>.png  外觀：髮型（有的話會取代 body/）
-//   Resources/characters/<角色>/looks/clothes/<衣服id>/{base,top}/<動作>_<格>.png  外觀：衣服
+//   Resources/characters/<角色>/manifest.json            動作格數 / 速度、服裝清單、sheet 的切法
+//   Resources/characters/<角色>/body.png                  寵物本體
+//   Resources/characters/<角色>/outfits/<服裝id>.png      服裝疊圖（與本體同尺寸、同格數）
+//   Resources/characters/<角色>/looks/hair/<髮型id>/{behind,head}.png  外觀：髮型（有的話會取代 body）
+//   Resources/characters/<角色>/looks/clothes/<衣服id>/{base,top}.png  外觀：衣服
 //   Resources/props/<名字>.png                           家具等道具（所有角色共用）
 //
-// 圖片可以是 .png 或 .pdf（向量，放大不糊）。換外觀只要替換檔案，不用改程式。
+// manifest 沒有 sheet 的舊素材，還是讀一格一張的 <層>/<動作>_<格>.png（或 .pdf）。
 import AppKit
 
 struct Manifest: Decodable {
@@ -49,6 +50,13 @@ struct Manifest: Decodable {
     let outfits: [Outfit]
     let looks: Looks?               // 舊素材（例如小貓）沒有外觀圖層
     let backFrames: [String: [Int]]?  // 背對畫面的格（動作名 → 第幾格）
+    // sprite sheet 的切法：每列 columns 格、每格 cell 像素；動作的第 i 格是第 start[動作] + i 格（由左到右、由上到下）
+    struct Sheet: Decodable {
+        let columns: Int
+        let cell: Int
+        let start: [String: Int]
+    }
+    let sheet: Sheet?
 }
 
 // 目前選的外觀：髮型 id + 衣服 id。
@@ -155,6 +163,11 @@ final class SpriteLibrary {
         let key = "\(folder)/\(action.rawValue)"
         if let cached = cache[key] { return cached }
 
+        if let sheet = manifest.sheet {
+            let frames = sheetFrames(folder: folder, action: action, sheet: sheet)
+            cache[key] = frames
+            return frames
+        }
         var frames: [NSImage] = []
         for i in 0..<info(action).frames {
             let base = root.appendingPathComponent("\(folder)/\(action.rawValue)_\(i)")
@@ -166,5 +179,27 @@ final class SpriteLibrary {
         }
         cache[key] = frames
         return frames
+    }
+
+    // 整張 sprite sheet，一層讀一次。nil 表示這一層沒有圖（存成 .some(nil)，不會一直重讀）。
+    private var sheets: [String: CGImage?] = [:]
+
+    private func sheetImage(_ folder: String) -> CGImage? {
+        if let cached = sheets[folder] { return cached }
+        let url = root.appendingPathComponent("\(folder).png")
+        let image = CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
+        sheets[folder] = .some(image)
+        return image
+    }
+
+    // 從 sprite sheet 切出某個動作的每一格（切出來的圖跟整張共用記憶體）。
+    private func sheetFrames(folder: String, action: PetAction, sheet: Manifest.Sheet) -> [NSImage] {
+        guard let start = sheet.start[action.rawValue], let image = sheetImage(folder) else { return [] }
+        let cell = sheet.cell, size = NSSize(width: cell, height: cell)
+        return (0..<info(action).frames).compactMap { i in
+            let k = start + i
+            let rect = CGRect(x: (k % sheet.columns) * cell, y: (k / sheet.columns) * cell, width: cell, height: cell)
+            return image.cropping(to: rect).map { NSImage(cgImage: $0, size: size) }
+        }
     }
 }

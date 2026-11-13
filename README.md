@@ -119,25 +119,35 @@ Xcode 會把這個 Swift Package 當專案打開，按左上角 ▶︎ 就能跑
 ```
 Resources/
   characters/<角色>/
-    manifest.json                    角色名稱、動作格數、播放速度、部位、服裝清單
+    manifest.json                    角色名稱、動作格數、播放速度、部位、服裝清單、sprite sheet 的切法
     phrases.json                     這個角色的台詞
-    body/<動作>_<格>.png              本體，例如 walk_0.png ~ walk_5.png
-    outfits/<服裝id>/<動作>_<格>.png   服裝疊圖
-    looks/hair/<髮型id>/behind/…      外觀：垂在身後的頭髮
-    looks/hair/<髮型id>/head/…        外觀：頭（兔耳、臉、頭髮）
-    looks/clothes/<衣服id>/base/…     外觀：腳、垂下的手、衣服
-    looks/clothes/<衣服id>/top/…      外觀：舉高的手、胡蘿蔔、睡覺的 z
+    body.png                         本體
+    outfits/<服裝id>.png              服裝疊圖
+    looks/hair/<髮型id>/behind.png    外觀：垂在身後的頭髮
+    looks/hair/<髮型id>/head.png      外觀：頭（兔耳、臉、頭髮）
+    looks/clothes/<衣服id>/base.png   外觀：腳、垂下的手、衣服
+    looks/clothes/<衣服id>/top.png    外觀：舉高的手、胡蘿蔔、睡覺的 z
   props/                             家具、飛機、降落傘（所有角色共用）
 ```
 
-有 `looks/` 的話，App 用這四層（由下往上）疊出她本人，`body/` 就不會用到；沒有的話（例如小貓素材）照舊用 `body/`。
+每一層是一張 **sprite sheet**：這一層所有動作的所有格排在同一張圖上，依 manifest 的 `actions` 順序
+由左到右、由上到下，每列 8 格、每格 224×224 像素。`manifest.json` 的 `sheet` 記下每個動作從第幾格開始：
+
+```json
+"sheet": { "columns": 8, "cell": 224, "start": { "idle": 0, "walk": 4, "run": 10, … } }
+```
+
+例如 `walk` 的第 2 格是第 4 + 2 = 6 格：第 0 列、第 6 欄。
+
+有 `looks/` 的話，App 用這四層（由下往上）疊出她本人，`body.png` 就不會用到；沒有的話（例如小貓素材）照舊用 `body`。
+manifest 沒有 `sheet` 的舊素材，還是讀一格一張的 `body/<動作>_<格>.png`（支援 `.png` 和 `.pdf`）。
 
 規則很簡單：
 
-- **每張圖畫布一樣大**（目前 112×112 點，輸出 224×224 像素），角色腳底對齊同一個位置。
+- **每一格畫布一樣大**（目前 112×112 點，輸出 224×224 像素），角色腳底對齊同一個位置。
 - **服裝是透明背景的疊圖**，跟本體同動作、同格數，疊上去剛好穿在身上。
   某個動作沒畫衣服的話，會改用該服裝的 idle 圖。
-- 支援 `.png` 和 `.pdf`（向量，放大不糊）。從 Figma / Illustrator 匯出即可。
+- 素材由 `swift Tools/generate-bunny.swift [amiya|rim]` 產生，它會自動拼好 sprite sheet。
 - `jump` 的 4 格有固定意義：0 蹲下、1 上升、2 下降、3 落地。
 
 **新增一件衣服**：建 `outfits/<新id>/` 資料夾放圖，然後在 `manifest.json` 的 `outfits` 加一筆

@@ -1,6 +1,6 @@
 // PetAction.swift —— 寵物會做的所有動作。
 //
-// 每個動作的名字（rawValue）同時也是圖片檔名的前綴，例如 walk → walk_0.png、walk_1.png…
+// 每個動作的名字（rawValue）對應 manifest.json 的 actions 和 sheet.start，例如 walk → sprite sheet 裡 walk 的那幾格
 import Foundation
 
 enum PetAction: String, CaseIterable {
