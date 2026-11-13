@@ -45,6 +45,11 @@
       "frames" : 4,
       "loop" : true
     },
+    "parasol" : {
+      "fps" : 4,
+      "frames" : 4,
+      "loop" : true
+    },
     "run" : {
       "fps" : 16,
       "frames" : 6,
@@ -121,6 +126,10 @@
       {
         "id" : "yukata",
         "name" : "日系浴衣"
+      },
+      {
+        "id" : "gothic",
+        "name" : "哥德蘿莉"
       }
     ],
     "hair" : [
@@ -294,6 +303,14 @@
       "id" : "lollipop",
       "name" : "棒棒糖",
       "power" : 2,
+      "slot" : "hand"
+    },
+    {
+      "behind" : false,
+      "dungeon" : false,
+      "id" : "umbrella",
+      "name" : "哥德雨傘",
+      "power" : 4,
       "slot" : "hand"
     },
     {

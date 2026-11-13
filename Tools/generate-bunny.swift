@@ -86,6 +86,7 @@ struct Pose {
     var back = false                // 轉過身，背對畫面（跳舞時扭屁股用）
     var tail: CGFloat = 0           // 背面時兔尾巴的左右擺動
     var straps = false              // 抓著降落傘的繩子（繩子一路畫到畫布頂端）
+    var parasol = false             // 撐著雨傘飄下來（拿雨傘時代替降落傘；傘柄一路畫到畫布頂端）
     var carrot = false              // 前手拿著胡蘿蔔，尖端朝嘴巴（吃東西用）
     var frame = 0                   // 這是動作的第幾格、一共幾格（會動的服裝用，例如 VIP 翅膀拍動、閃光）
     var frameCount = 1
@@ -700,7 +701,7 @@ let outfitPower: [String: Int] = [
     "cap": 3, "party_hat": 2, "glasses": 2, "sunglasses": 4, "scarf": 3, "bowtie": 2,
     "straw_hat": 5, "witch_hat": 9, "cape": 8, "crown": 14, "ribbon": 11,
     "flower_crown": 3, "headphones": 2, "goggles": 4, "heart_glasses": 2, "bell_collar": 2,
-    "balloon": 1, "lollipop": 2, "backpack": 3, "wings": 6, "vip_wings": 20,
+    "balloon": 1, "lollipop": 2, "umbrella": 4, "backpack": 3, "wings": 6, "vip_wings": 20,
 ]
 // 只能從地下城拿到的服裝（還沒拿到前不會出現在衣櫃）。
 let dungeonOutfits: Set<String> = [
@@ -709,6 +710,79 @@ let dungeonOutfits: Set<String> = [
     "crown", "ribbon", "wings",                     // 城堡
     "vip_wings",                                    // 星空神殿
 ]
+
+// 哥德雨傘的顏色與撐開的傘面（降落時用的道具圖）。
+let umbrellaBlack = hex(0x1E1A24), umbrellaShade = hex(0x3A2D4A), umbrellaWine = hex(0x9B2242)
+let umbrellaLace = hex(0xF1ECF4), umbrellaShaft = hex(0x9A95A6)
+
+// 撐開的傘（哥德蘿莉的鐘形洋傘）：c 是傘面下緣的中心，r 半徑、dome 高度。
+// 黑 / 深紫相間的六片傘面，下緣一圈白蕾絲，傘骨尖端掛酒紅小珠，傘頂蝴蝶結 + 尖頂。
+func drawOpenUmbrella(_ ctx: CGContext, rim c: CGPoint, radius r: CGFloat, dome: CGFloat) {
+    let n = 6
+    let tip = pt(c.x, c.y + dome)
+    // 傘骨尖端：中間的比兩端低一點，看起來有弧度
+    let ribs = (0...n).map { k -> CGPoint in
+        let f = CGFloat(k) / CGFloat(n)
+        return pt(c.x - r + r * 2 * f, c.y - 3 * sin(.pi * f))
+    }
+    func edge(_ k: Int, _ f: CGFloat) -> CGPoint {   // 第 k 片下緣上的點（兩根傘骨之間往上拱）
+        let a = ribs[k], b = ribs[k + 1], m = pt((a.x + b.x) / 2, (a.y + b.y) / 2 + 4)
+        return lerp(lerp(a, m, f), lerp(m, b, f), f)
+    }
+    // 白蕾絲：沿著下緣一顆顆小圓，傘面蓋住上半
+    for k in 0..<n {
+        for j in 0...4 {
+            let q = edge(k, CGFloat(j) / 4)
+            shape(ctx, ellipse(q.x, q.y - 0.6, 3.6, 3.6), umbrellaLace, lineWidth: 0.8)
+        }
+    }
+    // 鐘形傘面：下襬外張、往上收成尖頂
+    let canopy = CGMutablePath()
+    canopy.move(to: ribs[0])
+    canopy.addCurve(to: tip, control1: pt(c.x - r * 0.78, c.y + dome * 0.5), control2: pt(c.x - r * 0.2, c.y + dome * 0.62))
+    canopy.addCurve(to: ribs[n], control1: pt(c.x + r * 0.2, c.y + dome * 0.62), control2: pt(c.x + r * 0.78, c.y + dome * 0.5))
+    for k in stride(from: n - 1, through: 0, by: -1) {
+        let a = ribs[k + 1], b = ribs[k]
+        canopy.addQuadCurve(to: b, control: pt((a.x + b.x) / 2, (a.y + b.y) / 2 + 4))
+    }
+    canopy.closeSubpath()
+    shape(ctx, canopy, umbrellaBlack, stroke: false)
+    func rib(_ k: Int) -> CGPath {
+        quad(tip, ribs[k], pt(c.x + (ribs[k].x - c.x) * 0.72, c.y + dome * 0.62))
+    }
+    // 隔一片塗深紫
+    clipped(ctx, to: canopy) {
+        for k in stride(from: 1, to: n, by: 2) {
+            let panel = CGMutablePath()
+            panel.addPath(rib(k))
+            panel.addLine(to: pt(ribs[k].x, c.y - 8)); panel.addLine(to: pt(ribs[k + 1].x, c.y - 8)); panel.addLine(to: ribs[k + 1])
+            panel.addQuadCurve(to: tip, control: pt(c.x + (ribs[k + 1].x - c.x) * 0.72, c.y + dome * 0.62))
+            panel.closeSubpath()
+            shape(ctx, panel, umbrellaShade, stroke: false)
+        }
+        shape(ctx, ellipse(c.x - r * 0.42, c.y + dome * 0.42, r * 0.34, 4), hex(0xFFFFFF, 0.16), stroke: false)   // 光澤
+    }
+    for k in 1..<n { line(ctx, rib(k), outline, width: 1) }
+    ctx.addPath(canopy); ctx.setStrokeColor(outline); ctx.setLineWidth(2); ctx.strokePath()
+    for q in ribs { shape(ctx, ellipse(q.x, q.y - 1, 3, 3), umbrellaWine, lineWidth: 0.9) }   // 傘骨尖端的小珠
+    // 傘頂：尖頂 + 銀珠 + 酒紅蝴蝶結
+    line(ctx, segment(tip, pt(tip.x, tip.y + 7)), outline, width: 2.2)
+    line(ctx, segment(pt(tip.x, tip.y + 1), pt(tip.x, tip.y + 6.5)), umbrellaShaft, width: 0.9)
+    shape(ctx, ellipse(tip.x, tip.y + 8, 3, 3), umbrellaShaft, lineWidth: 0.9)
+    drawBow(ctx, at: pt(tip.x, tip.y + 0.5), size: 2.6, umbrellaWine)
+}
+
+// 撐傘飄下來時，傘柄在寵物畫布頂端的 x（設計座標，就是舉起的前手正上方）。
+let parasolX: CGFloat = 70
+
+// 道具圖：撐開的雨傘，傘柄從畫布底部往上接到傘面（跟寵物圖裡的傘柄接起來）。
+// 道具圖不加 offsetX，所以這裡要自己加上。
+func drawUmbrellaProp(_ ctx: CGContext) {
+    let c = pt(parasolX + offsetX, 32)
+    line(ctx, segment(pt(c.x, -2), pt(c.x, c.y + 6)), outline, width: 2.6)
+    line(ctx, segment(pt(c.x, -2), pt(c.x, c.y + 6)), umbrellaShaft, width: 1.2)
+    drawOpenUmbrella(ctx, rim: c, radius: 29, dome: 30)
+}
 
 let outfits: [Outfit] = [
     Outfit(id: "cap", name: "棒球帽", slot: "head") { ctx, p in
@@ -1042,6 +1116,61 @@ let outfits: [Outfit] = [
             }
             line(ctx, swirl, hex(0xFFFFFF), width: 1.6)
             shape(ctx, ellipse(h.x, h.y, 7.5, 7.5), white, lineWidth: 1.8)
+        }
+    },
+
+    // 哥德雨傘：平常收起來拿在手上（順著手臂方向）；從高處掉下來時撐開代替降落傘，
+    // 撐開的傘面是獨立道具圖 props/umbrella_open.png，這裡只畫從手伸到畫布頂端的傘柄。
+    Outfit(id: "umbrella", name: "哥德雨傘", slot: "hand") { ctx, p in
+        guard !p.carrot else { return }
+        if p.parasol {
+            // 傘柄從手直直往上，在 x = parasolX 跟道具圖的傘柄接起來（App 會讓道具圖跟著她轉向翻面）
+            let h = hand(shoulderFront, p.armFront).applying(upperTransform(p))
+            let top = pt(parasolX, canvas + 2)
+            line(ctx, segment(h, top), outline, width: 2.6)
+            line(ctx, segment(h, top), umbrellaShaft, width: 1.2)
+            // 手下面的酒紅彎鉤握把
+            let hook = quad(pt(h.x, h.y - 2), pt(h.x + 5, h.y - 5), pt(h.x + 1.5, h.y - 10))
+            line(ctx, hook, outline, width: 3.2)
+            line(ctx, hook, umbrellaWine, width: 1.7)
+            cutOutBody(ctx, p, fromBehind: true)   // 傘柄在頭和身體後面，手（本體）蓋在上面像握著
+            return
+        }
+        withState(ctx, upper(p)) {
+            let h = hand(shoulderFront, p.armFront)
+            let a = p.armFront + 0.6                             // 順著手臂再往前斜一點，傘尖才不會插進腳裡
+            let d = pt(sin(a), -cos(a))
+            func at(_ k: CGFloat, side: CGFloat = 0) -> CGPoint { pt(h.x + d.x * k - d.y * side, h.y + d.y * k + d.x * side) }
+            // 酒紅彎鉤握把（在手的另一邊）
+            let hook = CGMutablePath()
+            hook.move(to: at(1)); hook.addLine(to: at(-5))
+            hook.addQuadCurve(to: at(-5.5, side: 5.5), control: at(-10.5, side: 2.8))
+            line(ctx, hook, outline, width: 3.4)
+            line(ctx, hook, umbrellaWine, width: 1.8)
+            // 傘尖（銀色）
+            line(ctx, segment(at(23), at(29)), outline, width: 2.2)
+            line(ctx, segment(at(24), at(28.5)), umbrellaShaft, width: 0.9)
+            // 收攏的傘面開口那一圈白蕾絲，蓬在握把這頭
+            for side in [CGFloat(-3.4), 0, 3.4] {
+                let q = at(side == 0 ? 3.6 : 4.6, side: side)
+                shape(ctx, ellipse(q.x, q.y, 4.6, 4.6), umbrellaLace, lineWidth: 0.9)
+            }
+            // 收起來的傘面：靠握把這頭比較蓬、往傘尖收細，上面兩道摺痕
+            let furl = CGMutablePath()
+            furl.move(to: at(4.5, side: 3.2))
+            furl.addQuadCurve(to: at(25), control: at(14, side: 4.6))
+            furl.addQuadCurve(to: at(4.5, side: -3.2), control: at(14, side: -4.6))
+            furl.addQuadCurve(to: at(4.5, side: 3.2), control: at(6.5))
+            furl.closeSubpath()
+            shape(ctx, furl, umbrellaBlack, lineWidth: 1.5)
+            clipped(ctx, to: furl) {
+                shape(ctx, polygon([at(4, side: -0.2), at(4, side: -5), at(25, side: -0.2)]), umbrellaShade, stroke: false)
+            }
+            line(ctx, segment(at(6.5, side: 0.3), at(23)), outline, width: 0.8)
+            // 酒紅綁帶 + 小蝴蝶結
+            line(ctx, segment(at(13.5, side: 3.3), at(13.5, side: -3.3)), umbrellaWine, width: 1.8)
+            drawBow(ctx, at: at(13.5), size: 1.9, umbrellaWine)
+            shape(ctx, ellipse(h.x, h.y, 7.5, 7.5), white, lineWidth: 1.8)   // 手蓋在傘柄上
         }
     },
 
@@ -1739,7 +1868,60 @@ let yukataClothes: ClothesStyle = {
     )
 }()
 
-let clothesStyles: [ClothesStyle] = [amiyaClothes, jiraiClothes, ryousanClothes, sailorClothes, streetClothes, yukataClothes]
+// 哥德蘿莉：黑色馬甲連身裙、酒紅綁帶、兩層蕾絲裙襬、立領 + 銀十字、黑褲襪厚底鞋。
+let gothicClothes: ClothesStyle = {
+    let black = hex(0x1E1A24), shade = hex(0x34293F), wine = hex(0x7A1E34), lace = hex(0xE9E4EC), silver = hex(0xC9CCD6)
+    func skirt(_ ctx: CGContext) {
+        // 最下面一圈白蕾絲，上面兩層黑裙
+        for x in stride(from: CGFloat(32), through: 68, by: 4) {
+            shape(ctx, ellipse(x, 11, 4.6, 4), lace, lineWidth: 1.1)
+        }
+        let lower = CGMutablePath()
+        lower.move(to: pt(37, 22)); lower.addLine(to: pt(63, 22)); lower.addLine(to: pt(69, 12.5))
+        lower.addQuadCurve(to: pt(50, 11), control: pt(59, 10)); lower.addQuadCurve(to: pt(31, 12.5), control: pt(41, 10))
+        lower.closeSubpath()
+        shape(ctx, lower, black)
+        line(ctx, quad(pt(32.5, 14), pt(67.5, 14), pt(50, 11.2)), wine, width: 1.3)
+        let upper = CGMutablePath()
+        upper.move(to: pt(38.5, 28)); upper.addLine(to: pt(61.5, 28)); upper.addLine(to: pt(66, 18.5))
+        upper.addQuadCurve(to: pt(50, 17), control: pt(58, 16)); upper.addQuadCurve(to: pt(34, 18.5), control: pt(42, 16))
+        upper.closeSubpath()
+        shape(ctx, upper, shade)
+        for x in stride(from: CGFloat(36), through: 64, by: 4) {
+            shape(ctx, ellipse(x, 17.6, 4, 2.6), black, lineWidth: 1)   // 上層裙襬的荷葉邊
+        }
+    }
+    return ClothesStyle(
+        id: "gothic", name: "哥德蘿莉", sleeve: black, cuff: lace, sleeveWidth: 7.4,
+        legging: hex(0x15121A), shoe: hex(0x120F16), shoeHeight: 9,
+        torso: { ctx, _ in
+            skirt(ctx)
+            shape(ctx, rounded(37, 24, 26, 15, 4), black)                    // 馬甲
+            // 胸前酒紅交叉綁帶
+            for y in stride(from: CGFloat(26.5), through: 33, by: 3.2) {
+                line(ctx, segment(pt(47.5, y), pt(54.5, y + 2.6)), wine, width: 1.1)
+                line(ctx, segment(pt(54.5, y), pt(47.5, y + 2.6)), wine, width: 1.1)
+            }
+            // 白蕾絲立領 + 酒紅領結 + 銀十字
+            shape(ctx, rounded(42, 35.5, 18, 4.5, 2), lace, lineWidth: 1.3)
+            drawBow(ctx, at: pt(51, 35.5), size: 3, wine)
+            line(ctx, segment(pt(51, 33), pt(51, 27.5)), silver, width: 1.4)
+            line(ctx, segment(pt(49, 31.2), pt(53, 31.2)), silver, width: 1.4)
+        },
+        torsoBack: { ctx, _ in
+            skirt(ctx)
+            shape(ctx, rounded(34, 20, 32, 19, 6), black)
+            for y in stride(from: CGFloat(23), through: 33, by: 3.2) {   // 背後的綁帶
+                line(ctx, segment(pt(46.5, y), pt(53.5, y + 2.6)), wine, width: 1.1)
+                line(ctx, segment(pt(53.5, y), pt(46.5, y + 2.6)), wine, width: 1.1)
+            }
+            shape(ctx, rounded(40, 35.5, 20, 4.5, 2), lace, lineWidth: 1.3)
+            drawBow(ctx, at: pt(50, 21), size: 6, wine)                  // 腰後大蝴蝶結
+        }
+    )
+}()
+
+let clothesStyles: [ClothesStyle] = [amiyaClothes, jiraiClothes, ryousanClothes, sailorClothes, streetClothes, yukataClothes, gothicClothes]
 
 // 目前畫的是哪一套。產生本體與一般服裝時是阿米婭原本的樣子；產生外觀圖層時才會換。
 let defaultLook = Look(hair: amiyaHair, clothes: amiyaClothes)
@@ -1766,6 +1948,8 @@ let actions: [ActionSpec] = [
     ActionSpec(name: "dragged", frames: 2, fps: 5, loop: true),
     ActionSpec(name: "dance", frames: 16, fps: 8, loop: true),
     ActionSpec(name: "parachute", frames: 4, fps: 4, loop: true),
+    // 拿著雨傘時代替降落傘：單手撐傘飄下來（格數、速度要跟 parachute 一樣）
+    ActionSpec(name: "parasol", frames: 4, fps: 4, loop: true),
     ActionSpec(name: "eat", frames: 4, fps: 5, loop: true),
     ActionSpec(name: "typing", frames: 4, fps: 6, loop: true),
     // 一格是擺盪的四分之一週期，要跟程式裡的 swingPeriod（2.4 秒）對上
@@ -1935,6 +2119,16 @@ func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
             p.armFront = 1.9; p.armBack = 0.25
             p.ears = 0.05
         }
+    case "parasol":
+        // 單手撐傘飄下來：前手舉高握傘柄，後手跟腳輕輕晃
+        p.parasol = true
+        p.bodyY = 2
+        p.lean = 0.05 * sin(t)
+        p.armFront = 2.35; p.armBack = -0.5 + 0.25 * sin(t)
+        p.frontFoot = CGPoint(x: 2 * sin(t), y: 2)
+        p.backFoot = CGPoint(x: -2 * sin(t), y: 3)
+        p.ears = 0.12 * sin(t)
+        p.eyes = i == 2 ? .happy : .open
     case "parachute":
         // 吊在傘下：雙手抓繩、腳懸空晃來晃去
         p.straps = true
@@ -2356,6 +2550,7 @@ for spec in actions where previewFrames == nil {
 
 if previewFrames == nil {
 try write(renderPNG(height: canopyHeight, offset: 0) { drawCanopy($0) }, "props/parachute.png")
+try write(renderPNG(height: canopyHeight, offset: 0) { drawUmbrellaProp($0) }, "props/umbrella_open.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: false) }, "props/dining.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: true) }, "props/dining_meal.png")
 try write(renderPNG(width: computerWidth, height: computerHeight) { drawComputer($0, on: false) }, "props/computer.png")
@@ -2364,7 +2559,7 @@ try write(renderPNG(width: swingWidth, height: swingHeight) { drawSwingTree($0) 
 for (part, name) in [(PlanePart.parked, "plane"), (.back, "plane_back"), (.front(0), "plane_front_0"), (.front(1), "plane_front_1")] {
     try write(renderPNG(width: planeWidth, height: planeHeight) { drawPlane($0, part) }, "props/\(name).png")
 }
-count += 10
+count += 11
 }
 
 // 外觀圖層：每種髮型畫 hairBehind / head，每套服裝畫 base / top，各自獨立，App 再疊起來。

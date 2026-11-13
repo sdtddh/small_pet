@@ -14,6 +14,7 @@ enum PetAction: String, CaseIterable {
     case dragged    // 被滑鼠抓著
     case dance      // 跳舞（原地，仿 GIF 的舞步）
     case parachute  // 從高處掉下來時打開降落傘，慢慢飄下去
+    case parasol    // 只用來顯示：拿著雨傘時，降落傘改成撐傘飄下去（物理上還是 parachute）
     case eat        // 坐著啃胡蘿蔔（餵食時）
     case typing     // 坐在電腦桌前打電腦
     case swing      // 盪鞦韆
@@ -34,6 +35,7 @@ enum PetAction: String, CaseIterable {
         case .dragged: "被抓住"
         case .dance: "跳舞"
         case .parachute: "降落傘"
+        case .parasol: "撐傘"
         case .eat: "吃東西"
         case .typing: "打電腦"
         case .swing: "盪鞦韆"
@@ -56,7 +58,7 @@ enum PetAction: String, CaseIterable {
         case .jump: 5
         case .run: 4
         case .dance: 4
-        case .fall, .dragged, .parachute, .eat, .typing, .swing, .fly, .keytap, .tap: 0
+        case .fall, .dragged, .parachute, .parasol, .eat, .typing, .swing, .fly, .keytap, .tap: 0
         }
     }
 
@@ -75,7 +77,7 @@ enum PetAction: String, CaseIterable {
         case .fly: 20...35      // 在天上繞多久，之後才開始降落
         case .keytap: 1.5...1.5 // 你停手後再多打一下下（每按一鍵都會延長）
         case .tap: 0.35...0.35
-        case .jump, .fall, .dragged, .parachute: 0...0   // 由物理決定何時結束
+        case .jump, .fall, .dragged, .parachute, .parasol: 0...0   // 由物理決定何時結束
         }
     }
 }
