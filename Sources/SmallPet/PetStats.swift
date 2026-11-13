@@ -158,6 +158,14 @@ final class PetStats: ObservableObject {
         return nil
     }
 
+    // 冒險時間提早 seconds 秒結束（點 boss 多砍一刀）。
+    func shortenRun(by seconds: TimeInterval) {
+        guard var run = state.run else { return }
+        run.endsAt = run.endsAt.addingTimeInterval(-seconds)
+        state.run = run
+        save()
+    }
+
     // 冒險時間到了沒。
     var runFinished: Bool {
         guard let run = state.run else { return false }

@@ -1,5 +1,10 @@
 {
   "actions" : {
+    "attack" : {
+      "fps" : 9,
+      "frames" : 6,
+      "loop" : true
+    },
     "dance" : {
       "fps" : 8,
       "frames" : 16,
@@ -95,6 +100,7 @@
     "cell" : 224,
     "columns" : 8,
     "start" : {
+      "attack" : 66,
       "dance" : 28,
       "dragged" : 26,
       "eat" : 52,
