@@ -88,6 +88,9 @@ struct Pose {
     var straps = false              // 抓著降落傘的繩子（繩子一路畫到畫布頂端）
     var parasol = false             // 撐著雨傘飄下來（拿雨傘時代替降落傘；傘柄一路畫到畫布頂端）
     var carrot = false              // 前手拿著胡蘿蔔，尖端朝嘴巴（吃東西用）
+    var sword = false               // 前手握著劍（地下城打 boss 用）
+    var slash: CGFloat = 0          // 揮劍的刀光：0 沒有，越大越亮
+    var slashFrom: CGFloat = 0      // 刀光從哪個手臂角度劃到現在的角度
     var frame = 0                   // 這是動作的第幾格、一共幾格（會動的服裝用，例如 VIP 翅膀拍動、閃光）
     var frameCount = 1
 }
@@ -124,6 +127,17 @@ func petal(_ a: CGPoint, _ b: CGPoint, width w: CGFloat) -> CGPath {
 }
 
 // 填色 + 描邊，向量風格的基本筆觸。
+// 畫像素風格時（renderPixelPNG），一個像素是幾個設計單位；0 代表平常的向量畫法。
+// 像素風格下線條至少一個像素粗，不然關掉反鋸齒後細線會斷掉。
+var pixelCell: CGFloat = 0
+func lineWidthFor(_ w: CGFloat) -> CGFloat { pixelCell > 0 ? max(w, pixelCell) : w }
+
+// 發光（模糊陰影）。像素風格不要模糊，直接略過。
+func setGlow(_ ctx: CGContext, blur: CGFloat, _ color: CGColor) {
+    guard pixelCell == 0 else { return }
+    ctx.setShadow(offset: .zero, blur: blur, color: color)
+}
+
 func shape(_ ctx: CGContext, _ path: CGPath, _ color: CGColor, stroke: Bool = true, lineWidth: CGFloat = 2.2) {
     ctx.addPath(path)
     ctx.setFillColor(color)
@@ -131,7 +145,7 @@ func shape(_ ctx: CGContext, _ path: CGPath, _ color: CGColor, stroke: Bool = tr
     if stroke {
         ctx.addPath(path)
         ctx.setStrokeColor(outline)
-        ctx.setLineWidth(lineWidth)
+        ctx.setLineWidth(lineWidthFor(lineWidth))
         ctx.strokePath()
     }
 }
@@ -139,7 +153,7 @@ func shape(_ ctx: CGContext, _ path: CGPath, _ color: CGColor, stroke: Bool = tr
 func line(_ ctx: CGContext, _ path: CGPath, _ color: CGColor, width: CGFloat) {
     ctx.addPath(path)
     ctx.setStrokeColor(color)
-    ctx.setLineWidth(width)
+    ctx.setLineWidth(lineWidthFor(width))
     ctx.strokePath()
 }
 
@@ -222,14 +236,15 @@ func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
             }
         }
 
-        // 後腳 + 後手（在身體後面）
+        // 她面向右邊、身體斜四分之三：畫面左邊那隻手（shoulderBack）是靠近我們的手，要擋在衣服前面；
+        // 畫面右邊、臉那一側的手（shoulderFront，拿東西、打字、揮劍用的）是遠的那隻，從身體後面伸出來。
         drawLeg(ctx, from: hipBack.applying(ut), to: CGPoint(x: footBack.x + p.backFoot.x, y: footBack.y + p.backFoot.y))
-        if !raised(p.armBack) { withState(ctx, upper(p)) { drawArm(ctx, shoulderBack, p.armBack) } }
+        if !raised(p.armFront) { withState(ctx, upper(p)) { drawArm(ctx, shoulderFront, p.armFront) } }
         drawLeg(ctx, from: hipFront.applying(ut), to: CGPoint(x: footFront.x + p.frontFoot.x, y: footFront.y + p.frontFoot.y))
 
         withState(ctx, upper(p)) {
             look.clothes.torso(ctx, p)
-            if !raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
+            if !raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
         }
     }
 
@@ -246,6 +261,9 @@ func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
             if raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
             if raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
         }
+
+        // 劍（和刀光）永遠在最前面，看起來握在手裡
+        if p.sword { withState(ctx, upper(p)) { drawSword(ctx, p) } }
 
         // 睡覺的 z
         for i in 0..<p.zzz {
@@ -562,7 +580,7 @@ func sparkle(_ ctx: CGContext, at c: CGPoint, size r: CGFloat, color: CGColor) {
     star.addQuadCurve(to: CGPoint(x: c.x - r, y: c.y), control: c)
     star.addQuadCurve(to: CGPoint(x: c.x, y: c.y + r), control: c)
     ctx.saveGState()
-    ctx.setShadow(offset: .zero, blur: 3, color: hex(0xFFE27A))
+    setGlow(ctx, blur: 3, hex(0xFFE27A))
     ctx.addPath(star)
     ctx.setFillColor(color)
     ctx.fillPath()
@@ -1955,6 +1973,8 @@ let actions: [ActionSpec] = [
     // 一格是擺盪的四分之一週期，要跟程式裡的 swingPeriod（2.4 秒）對上
     ActionSpec(name: "swing", frames: 4, fps: 4 / 2.4, loop: true),
     ActionSpec(name: "fly", frames: 2, fps: 4, loop: true),
+    // 在地下城拿劍砍 boss：一刀 6 格，第 3 格砍中（程式在這格讓 boss 閃一下）
+    ActionSpec(name: "attack", frames: 6, fps: 9, loop: true),
 ]
 
 func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
@@ -2092,6 +2112,30 @@ func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
         p.ears = i == 0 ? 0.55 : 0.68
         p.eyes = i == 0 ? .open : .happy
         p.mouthOpen = i == 1
+    case "attack":
+        // 0 準備、1 舉劍、2 揮下、3 砍中、4 收勢、5 站穩
+        p.sword = true
+        p.armBack = 0.55
+        p.eyes = .open
+        switch i {
+        case 0:
+            p.armFront = 1.25; p.lean = 0.04; p.frontFoot = CGPoint(x: 3, y: 0); p.ears = 0.1
+        case 1:
+            p.armFront = 2.85; p.lean = -0.08; p.squashY = 1.02; p.armBack = 0.9
+            p.frontFoot = CGPoint(x: 2, y: 1); p.ears = 0.25
+        case 2:
+            p.armFront = 1.9; p.lean = 0.1; p.frontFoot = CGPoint(x: 6, y: 0); p.backFoot = CGPoint(x: -3, y: 0)
+            p.slash = 0.6; p.slashFrom = 2.5; p.mouthOpen = true; p.ears = 0.35
+        case 3:
+            p.armFront = 0.95; p.lean = 0.17; p.squashY = 0.97; p.squashX = 1.03
+            p.frontFoot = CGPoint(x: 7, y: 0); p.backFoot = CGPoint(x: -4, y: 0)
+            p.slash = 1; p.slashFrom = 2.3; p.mouthOpen = true; p.ears = 0.45
+        case 4:
+            p.armFront = 0.6; p.lean = 0.12; p.frontFoot = CGPoint(x: 6, y: 0); p.backFoot = CGPoint(x: -3, y: 0)
+            p.slash = 0.35; p.slashFrom = 1.5; p.ears = 0.3
+        default:
+            p.armFront = 0.95; p.lean = 0.06; p.frontFoot = CGPoint(x: 4, y: 0); p.ears = 0.15
+        }
     case "parasol":
         // 單手撐傘飄下來：前手舉高握傘柄，後手跟腳輕輕晃
         p.parasol = true
@@ -2475,6 +2519,342 @@ func drawPlane(_ ctx: CGContext, _ part: PlanePart) {
     shape(ctx, ellipse(162, 22, 7, 9), planeDark, lineWidth: 1.6)
 }
 
+// MARK: - 劍（地下城打 boss）
+
+// 劍的方向：順著手臂再往上翹一點，舉劍時指向後上方、砍下去時指向前方。
+func swordAngle(_ armAngle: CGFloat) -> CGFloat { armAngle + 0.5 }
+
+func drawSword(_ ctx: CGContext, _ p: Pose) {
+    let h = hand(shoulderFront, p.armFront)
+    // 刀光：從舉劍的角度劃到現在的角度，一道彎彎的光
+    if p.slash > 0 {
+        let s = shoulderFront
+        let r: CGFloat = 38
+        let a0 = swordAngle(p.slashFrom), a1 = swordAngle(p.armFront)
+        let arc = CGMutablePath()
+        // 角度 0 往下、往前轉為正；換成 CG 的角度（從 +x 逆時針）是 a - π/2 的相反
+        func pt(_ a: CGFloat, _ rr: CGFloat) -> CGPoint { CGPoint(x: s.x + sin(a) * rr, y: s.y - cos(a) * rr) }
+        let steps = 14
+        for k in 0...steps {
+            let a = a0 + (a1 - a0) * CGFloat(k) / CGFloat(steps)
+            let q = pt(a, r)
+            if k == 0 { arc.move(to: q) } else { arc.addLine(to: q) }
+        }
+        ctx.saveGState()
+        ctx.setLineCap(.round)
+        ctx.setShadow(offset: .zero, blur: 6, color: hex(0x9FE8FF, 0.9 * p.slash))
+        line(ctx, arc, hex(0xBFF1FF, 0.55 * p.slash), width: 9)
+        line(ctx, arc, hex(0xFFFFFF, 0.9 * p.slash), width: 3)
+        ctx.restoreGState()
+    }
+    let a = swordAngle(p.armFront)
+    let d = CGPoint(x: sin(a), y: -cos(a))
+    let n = CGPoint(x: -d.y, y: d.x)
+    func at(_ k: CGFloat, _ side: CGFloat = 0) -> CGPoint {
+        CGPoint(x: h.x + d.x * k + n.x * side, y: h.y + d.y * k + n.y * side)
+    }
+    // 劍柄、護手、劍身
+    ctx.setLineCap(.round)
+    line(ctx, segment(at(-4), at(3)), outline, width: 4.4)
+    line(ctx, segment(at(-4), at(3)), hex(0x8B5A3C), width: 2.4)
+    shape(ctx, ellipse(at(-4.5).x, at(-4.5).y, 3.6, 3.6), hex(0xF2C94C), lineWidth: 1.1)
+    let blade = polygon([at(4, -2.2), at(22, -1.8), at(27, 0), at(22, 1.8), at(4, 2.2)])
+    shape(ctx, blade, hex(0xE6EEF5), lineWidth: 1.5)
+    line(ctx, segment(at(5), at(23)), hex(0xAFC4D6), width: 1)
+    line(ctx, segment(at(3, -5), at(3, 5)), outline, width: 4)
+    line(ctx, segment(at(3, -5), at(3, 5)), hex(0xF2C94C), width: 2.2)
+    // 手蓋在劍柄上，看起來握住了
+    shape(ctx, ellipse(h.x, h.y, 7.5, 7.5), white, lineWidth: 1.8)
+}
+
+// MARK: - 地下城 boss（獨立道具圖）
+//
+// 每個地下城一隻，面向左邊（她站在左邊砍）；她在右邊時程式把圖翻過來。
+// 每隻三張：idle_0、idle_1（呼吸 / 晃動）和 hit（被砍中：瞇眼、發白）。
+
+let bossPixel: CGFloat = 2      // 像素風格：一個像素 = 2 點（螢幕上 4×4 個實際像素）
+let bossWidth: CGFloat = 150
+let bossHeight: CGFloat = 130
+
+// 生氣的眼睛：白眼、黑瞳、往中間壓的眉毛；被砍中時變成 >< 。
+func bossEye(_ ctx: CGContext, _ c: CGPoint, size r: CGFloat, hit: Bool, glow: CGColor? = nil, left: Bool) {
+    if hit {
+        let z = CGMutablePath()
+        let s: CGFloat = left ? 1 : -1
+        z.addLines(between: [CGPoint(x: c.x - r * 0.7 * s, y: c.y + r * 0.6), CGPoint(x: c.x + r * 0.5 * s, y: c.y),
+                             CGPoint(x: c.x - r * 0.7 * s, y: c.y - r * 0.6)])
+        line(ctx, z, outline, width: 2.4)
+        return
+    }
+    if let glow {
+        ctx.saveGState()
+        setGlow(ctx, blur: 6, glow)
+        shape(ctx, ellipse(c.x, c.y, r * 1.6, r * 1.2), glow, lineWidth: 1.4)
+        ctx.restoreGState()
+        return
+    }
+    shape(ctx, ellipse(c.x, c.y, r * 1.7, r * 1.9), white, lineWidth: 1.6)
+    shape(ctx, ellipse(c.x - r * 0.25, c.y - r * 0.1, r * 0.9, r * 1.1), outline, stroke: false)
+    shape(ctx, ellipse(c.x - r * 0.4, c.y + r * 0.25, r * 0.35, r * 0.35), white, stroke: false)
+    // 眉毛：外高內低（生氣）
+    let s: CGFloat = left ? 1 : -1
+    line(ctx, segment(CGPoint(x: c.x - r * 1 * s, y: c.y + r * 1.5), CGPoint(x: c.x + r * 0.9 * s, y: c.y + r * 1.0)), outline, width: 2.6)
+}
+
+// 被砍中：砍到的地方（左邊、她那一側）爆一個黃色的衝擊星。
+func hitBurst(_ ctx: CGContext, at c: CGPoint) {
+    let star = CGMutablePath()
+    for k in 0..<16 {
+        let a = CGFloat(k) / 16 * 2 * .pi
+        let r: CGFloat = k % 2 == 0 ? 16 : 7
+        let q = CGPoint(x: c.x + cos(a) * r, y: c.y + sin(a) * r)
+        if k == 0 { star.move(to: q) } else { star.addLine(to: q) }
+    }
+    star.closeSubpath()
+    ctx.saveGState()
+    setGlow(ctx, blur: 6, hex(0xFFE27A))
+    shape(ctx, star, hex(0xFFE066), lineWidth: 1.6)
+    ctx.restoreGState()
+    shape(ctx, ellipse(c.x, c.y, 8, 8), white, stroke: false)
+}
+
+// 草原：草原史萊姆王——圓滾滾的綠色史萊姆，頭上長草、戴一頂小王冠、插一朵蒲公英。
+func drawSlimeKing(_ ctx: CGContext, frame: Int, hit: Bool) {
+    let squash: CGFloat = hit ? 0.9 : (frame == 0 ? 1 : 0.95)
+    let w: CGFloat = hit ? 118 : (frame == 0 ? 108 : 112)
+    let h: CGFloat = 92 * squash
+    let cx: CGFloat = 78, base: CGFloat = 6
+    let body = CGMutablePath()
+    body.move(to: CGPoint(x: cx - w / 2, y: base + 8))
+    body.addCurve(to: CGPoint(x: cx, y: base + h), control1: CGPoint(x: cx - w / 2 - 4, y: base + h * 0.75), control2: CGPoint(x: cx - w * 0.3, y: base + h))
+    body.addCurve(to: CGPoint(x: cx + w / 2, y: base + 8), control1: CGPoint(x: cx + w * 0.3, y: base + h), control2: CGPoint(x: cx + w / 2 + 4, y: base + h * 0.75))
+    body.addQuadCurve(to: CGPoint(x: cx - w / 2, y: base + 8), control: CGPoint(x: cx, y: base - 6))
+    body.closeSubpath()
+    // 地上的影子
+    shape(ctx, ellipse(cx, base + 2, w + 6, 8), hex(0x000000, 0.12), stroke: false)
+    gradientFill(ctx, body, [hex(0xA8EE8E), hex(0x5CC456), hex(0x3E9C43)], from: CGPoint(x: cx, y: base + h), to: CGPoint(x: cx, y: base))
+    line(ctx, body, outline, width: 2.4)
+    // 光澤
+    shape(ctx, ellipse(cx - w * 0.25, base + h * 0.72, 20, 10), hex(0xFFFFFF, 0.55), stroke: false)
+    shape(ctx, ellipse(cx - w * 0.36, base + h * 0.6, 6, 4), hex(0xFFFFFF, 0.45), stroke: false)
+    // 頭上的草
+    let top = base + h
+    for (dx, len, tilt) in [(CGFloat(-10), CGFloat(13), CGFloat(-0.4)), (-3, 17, -0.1), (5, 14, 0.25), (12, 10, 0.5)] {
+        shape(ctx, petal(CGPoint(x: cx + dx, y: top - 3), CGPoint(x: cx + dx + sin(tilt) * len, y: top - 3 + cos(tilt) * len), width: 4),
+              hex(0x3E9C43), lineWidth: 1.4)
+    }
+    // 小王冠（歪一邊）
+    withState(ctx, { c in c.translateBy(x: cx + 22, y: top - 6); c.rotate(by: -0.25); c.scaleBy(x: 1.5, y: 1.5) }) {
+        let crown = polygon([CGPoint(x: -10, y: 0), CGPoint(x: 10, y: 0), CGPoint(x: 11, y: 11), CGPoint(x: 5, y: 5),
+                             CGPoint(x: 0, y: 13), CGPoint(x: -5, y: 5), CGPoint(x: -11, y: 11)])
+        // 像素風格下外框會吃掉小王冠，所以實心填金色、底下一條深金色
+        shape(ctx, crown, hex(0xF7C948), stroke: false)
+        line(ctx, segment(CGPoint(x: -10, y: 0.8), CGPoint(x: 10, y: 0.8)), hex(0xC9932E), width: 1.6)
+        shape(ctx, ellipse(0, 4.5, 3.4, 3.4), hex(0xE0383A), stroke: false)
+    }
+    // 蒲公英
+    line(ctx, segment(CGPoint(x: cx - 26, y: top - 14), CGPoint(x: cx - 34, y: top + 8)), hex(0x3E9C43), width: 2)
+    shape(ctx, ellipse(cx - 34, top + 9, 14, 14), hex(0xFFE066), lineWidth: 1.6)
+    shape(ctx, ellipse(cx - 34, top + 9, 5, 5), hex(0xF2A93B), stroke: false)
+    // 臉（朝左）
+    let ey = base + h * 0.45
+    bossEye(ctx, CGPoint(x: cx - 26, y: ey), size: 7, hit: hit, left: true)
+    bossEye(ctx, CGPoint(x: cx - 2, y: ey), size: 7, hit: hit, left: false)
+    let mouth = CGMutablePath()
+    mouth.move(to: CGPoint(x: cx - 24, y: ey - 15))
+    mouth.addQuadCurve(to: CGPoint(x: cx - 4, y: ey - 15), control: CGPoint(x: cx - 14, y: ey - (hit ? 30 : 25)))
+    mouth.closeSubpath()
+    shape(ctx, mouth, hex(0x7A2E3A), lineWidth: 1.8)
+    shape(ctx, polygon([CGPoint(x: cx - 19, y: ey - 15), CGPoint(x: cx - 15, y: ey - 15), CGPoint(x: cx - 17, y: ey - 19)]), white, lineWidth: 1)
+    if hit { hitBurst(ctx, at: CGPoint(x: 30, y: 50)) }
+}
+
+// 森林：古樹樹精——長著臉的老樹幹，枝條手臂、滿頭樹葉、腳邊冒出蘑菇。
+func drawTreant(_ ctx: CGContext, frame: Int, hit: Bool) {
+    let sway: CGFloat = hit ? 6 : (frame == 0 ? 0 : 3)
+    let bark = hex(0x8A5A3C), barkDark = hex(0x5E3B26)
+    let leaf = hex(0x4FA35A), leafLight = hex(0x7CC46A)
+    shape(ctx, ellipse(78, 8, 90, 8), hex(0x000000, 0.12), stroke: false)
+    // 樹根
+    for (x0, x1) in [(CGFloat(52), CGFloat(40)), (70, 66), (96, 110)] {
+        shape(ctx, petal(CGPoint(x: x0 + 6, y: 22), CGPoint(x: x1, y: 6), width: 9), barkDark, lineWidth: 1.6)
+    }
+    // 後面的枝條手臂（舉起來）
+    let armBack = CGMutablePath()
+    armBack.move(to: CGPoint(x: 98, y: 58))
+    armBack.addQuadCurve(to: CGPoint(x: 128 + sway, y: 92), control: CGPoint(x: 122, y: 60))
+    line(ctx, armBack, outline, width: 9)
+    line(ctx, armBack, barkDark, width: 6)
+    shape(ctx, ellipse(130 + sway, 96, 22, 18), leaf, lineWidth: 1.8)
+    // 樹幹
+    let trunk = CGMutablePath()
+    trunk.move(to: CGPoint(x: 52, y: 10))
+    trunk.addCurve(to: CGPoint(x: 56, y: 86), control1: CGPoint(x: 46, y: 40), control2: CGPoint(x: 52, y: 70))
+    trunk.addLine(to: CGPoint(x: 100, y: 86))
+    trunk.addCurve(to: CGPoint(x: 106, y: 10), control1: CGPoint(x: 104, y: 70), control2: CGPoint(x: 112, y: 40))
+    trunk.closeSubpath()
+    shape(ctx, trunk, bark)
+    clipped(ctx, to: trunk) {
+        for (x, c) in [(CGFloat(62), CGFloat(66)), (78, 80), (94, 90)] {
+            line(ctx, quad(CGPoint(x: x, y: 12), CGPoint(x: x + 2, y: 84), CGPoint(x: c, y: 46)), barkDark, width: 1.4)
+        }
+    }
+    // 樹冠
+    for (x, y, r) in [(CGFloat(56), CGFloat(92), CGFloat(20)), (78, 106, 26), (102, 94, 20), (66, 112, 16), (92, 114, 17)] {
+        shape(ctx, ellipse(x + sway * 0.3, y, r * 2, r * 1.7), leaf, lineWidth: 1.8)
+        shape(ctx, ellipse(x - r * 0.3 + sway * 0.3, y + r * 0.3, r * 0.8, r * 0.5), leafLight, stroke: false)
+    }
+    // 前面的枝條手臂（揮過來）
+    let armFront = CGMutablePath()
+    armFront.move(to: CGPoint(x: 58, y: 54))
+    armFront.addQuadCurve(to: CGPoint(x: 22 - sway, y: 46), control: CGPoint(x: 36, y: 64))
+    line(ctx, armFront, outline, width: 9)
+    line(ctx, armFront, bark, width: 6)
+    for (dx, dy) in [(CGFloat(-6), CGFloat(6)), (-8, -4), (0, -8)] {
+        line(ctx, segment(CGPoint(x: 22 - sway, y: 46), CGPoint(x: 22 - sway + dx, y: 46 + dy)), outline, width: 3.4)
+        line(ctx, segment(CGPoint(x: 22 - sway, y: 46), CGPoint(x: 22 - sway + dx, y: 46 + dy)), bark, width: 1.8)
+    }
+    // 臉：發光的樹洞眼睛、大嘴
+    for (x, left) in [(CGFloat(66), true), (86, false)] {
+        shape(ctx, ellipse(x, 62, 13, 11), barkDark, lineWidth: 1.4)
+        bossEye(ctx, CGPoint(x: x, y: 62), size: 4.5, hit: hit, glow: hit ? nil : hex(0xD7FF6B), left: left)
+    }
+    let mouth = CGMutablePath()
+    mouth.move(to: CGPoint(x: 64, y: 44))
+    mouth.addQuadCurve(to: CGPoint(x: 88, y: 44), control: CGPoint(x: 76, y: hit ? 30 : 36))
+    mouth.closeSubpath()
+    shape(ctx, mouth, hex(0x2E1C12), lineWidth: 1.6)
+    // 腳邊的蘑菇
+    for (x, s) in [(CGFloat(40), CGFloat(1)), (112, 0.8)] {
+        line(ctx, segment(CGPoint(x: x, y: 5), CGPoint(x: x, y: 5 + 8 * s)), outline, width: 4.6)
+        line(ctx, segment(CGPoint(x: x, y: 5), CGPoint(x: x, y: 5 + 8 * s)), hex(0xF6E7D2), width: 3)
+        let cap = CGMutablePath()
+        cap.move(to: CGPoint(x: x - 8 * s, y: 12 * s + 1))
+        cap.addQuadCurve(to: CGPoint(x: x + 8 * s, y: 12 * s + 1), control: CGPoint(x: x, y: 26 * s))
+        cap.closeSubpath()
+        shape(ctx, cap, hex(0xE0503C), lineWidth: 1.4)
+        shape(ctx, ellipse(x - 2 * s, 16 * s, 3 * s, 2.4 * s), white, stroke: false)
+    }
+    if hit { hitBurst(ctx, at: CGPoint(x: 48, y: 56)) }
+}
+
+// 城堡：黑暗騎士——深紫鎧甲、紅羽毛頭盔、頭盔縫裡發紅光的眼睛，舉著大劍、拿著盾。
+func drawDarkKnight(_ ctx: CGContext, frame: Int, hit: Bool) {
+    let metal = hex(0x4A4E6A), metalDark = hex(0x2F3248), metalLight = hex(0x8A90B4), plume = hex(0xD8433A)
+    let bob: CGFloat = hit ? -2 : (frame == 0 ? 0 : 1.5)
+    shape(ctx, ellipse(80, 7, 80, 8), hex(0x000000, 0.14), stroke: false)
+    // 腳
+    for x in [CGFloat(68), 92] {
+        shape(ctx, rounded(x - 8, 5, 16, 30, 4), metalDark, lineWidth: 1.8)
+        shape(ctx, rounded(x - 10, 4, 20, 7, 3), metal, lineWidth: 1.6)
+    }
+    withState(ctx, { c in c.translateBy(x: 0, y: bob) }) {
+        // 後面的手舉著大劍
+        let blade = polygon([CGPoint(x: 112, y: 62), CGPoint(x: 120, y: 118), CGPoint(x: 116, y: 124), CGPoint(x: 112, y: 118), CGPoint(x: 106, y: 63)])
+        shape(ctx, blade, hex(0xC9D2E3), lineWidth: 1.6)
+        line(ctx, segment(CGPoint(x: 101, y: 64), CGPoint(x: 117, y: 60)), outline, width: 5)
+        line(ctx, segment(CGPoint(x: 101, y: 64), CGPoint(x: 117, y: 60)), hex(0x9C6BD8), width: 3)
+        shape(ctx, ellipse(108, 57, 11, 11), metal, lineWidth: 1.6)
+        // 身體（胸甲 + 裙甲）
+        let body = rounded(56, 30, 48, 42, 10)
+        shape(ctx, polygon([CGPoint(x: 56, y: 34), CGPoint(x: 104, y: 34), CGPoint(x: 108, y: 18), CGPoint(x: 52, y: 18)]), metalDark, lineWidth: 1.8)
+        shape(ctx, body, metal)
+        line(ctx, segment(CGPoint(x: 80, y: 34), CGPoint(x: 80, y: 68)), metalLight, width: 1.6)
+        shape(ctx, ellipse(68, 64, 22, 14), metalLight, lineWidth: 1.6)   // 肩甲
+        shape(ctx, ellipse(94, 64, 20, 13), metal, lineWidth: 1.6)
+        // 頭盔 + 紅羽毛
+        let helm = CGMutablePath()
+        helm.move(to: CGPoint(x: 62, y: 70))
+        helm.addCurve(to: CGPoint(x: 98, y: 70), control1: CGPoint(x: 60, y: 108), control2: CGPoint(x: 100, y: 108))
+        helm.closeSubpath()
+        shape(ctx, petal(CGPoint(x: 84, y: 98), CGPoint(x: 112, y: 108 + bob * 2), width: 12), plume, lineWidth: 1.6)
+        shape(ctx, helm, metal)
+        shape(ctx, rounded(62, 80, 26, 8, 3), hex(0x15121C), lineWidth: 1.4)   // 面罩縫（朝左）
+        for x in [CGFloat(68), 80] {
+            bossEye(ctx, CGPoint(x: x, y: 84), size: 3.4, hit: hit, glow: hit ? nil : hex(0xFF4A4A), left: x < 75)
+        }
+        line(ctx, segment(CGPoint(x: 80, y: 92), CGPoint(x: 80, y: 104)), metalLight, width: 1.6)
+        // 前面的盾（紫底金邊、中間一顆星）
+        let shield = CGMutablePath()
+        shield.move(to: CGPoint(x: 38, y: 64))
+        shield.addLine(to: CGPoint(x: 64, y: 64))
+        shield.addQuadCurve(to: CGPoint(x: 51, y: 24), control: CGPoint(x: 66, y: 34))
+        shield.addQuadCurve(to: CGPoint(x: 38, y: 64), control: CGPoint(x: 36, y: 34))
+        shield.closeSubpath()
+        shape(ctx, shield, hex(0x5B2A86), lineWidth: 2)
+        line(ctx, shield, hex(0xF2C94C), width: 1.4)
+        sparkle(ctx, at: CGPoint(x: 51, y: 48), size: 7, color: hex(0xF2C94C))
+        if hit { hitBurst(ctx, at: CGPoint(x: 44, y: 60)) }
+    }
+}
+
+func bezierPoint(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ t: CGFloat) -> CGPoint {
+    let u = 1 - t
+    let a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t
+    return CGPoint(x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y)
+}
+
+// 星空神殿：星空神龍——深藍到紫的長身體、身上滿是星星，金色的角、發光的眼睛，周圍飄著星光。
+func drawStarDragon(_ ctx: CGContext, frame: Int, hit: Bool) {
+    let bob: CGFloat = hit ? -3 : (frame == 0 ? 0 : 3)
+    let navy = hex(0x1E2A6E), purple = hex(0x6A3FC8), glow = hex(0x8FE3FF)
+    // 光暈
+    let aura = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                          colors: [hex(0x8FE3FF, 0.35), hex(0xB18CFF, 0.15), hex(0xB18CFF, 0)] as CFArray, locations: [0, 0.6, 1])!
+    ctx.drawRadialGradient(aura, startCenter: CGPoint(x: 80, y: 64), startRadius: 0, endCenter: CGPoint(x: 80, y: 64), endRadius: 70, options: [])
+    withState(ctx, { c in c.translateBy(x: 0, y: bob) }) {
+        // 彎彎的身體（從尾巴繞到脖子）
+        let c0 = CGPoint(x: 140, y: 24), c1 = CGPoint(x: 96, y: -6), c2 = CGPoint(x: 60, y: 40), c3 = CGPoint(x: 62, y: 84)
+        let bodyWidth: (CGFloat) -> CGFloat = { t in
+            let belly: CGFloat = 22 * sin(CGFloat.pi * min(1, t * 1.15))
+            return 6 + belly + 4 * t
+        }
+        let body = hairStrand(c0, c1, c2, c3, width: bodyWidth)
+        // 背鰭
+        for t in stride(from: CGFloat(0.2), through: 0.8, by: 0.15) {
+            let c = bezierPoint(c0, c1, c2, c3, t)
+            shape(ctx, polygon([CGPoint(x: c.x + 6, y: c.y + 4), CGPoint(x: c.x + 20, y: c.y + 14), CGPoint(x: c.x + 8, y: c.y - 6)]), purple, lineWidth: 1.4)
+        }
+        gradientFill(ctx, body, [navy, purple], from: CGPoint(x: 140, y: 24), to: CGPoint(x: 62, y: 84))
+        line(ctx, body, outline, width: 2.2)
+        clipped(ctx, to: body) {
+            for k in 0..<14 {
+                let q = CGPoint(x: 50 + 100 * noise(k * 3 + 1), y: 4 + 90 * noise(k * 3 + 2))
+                sparkle(ctx, at: q, size: 1.8 + 2 * noise(k * 3 + 3), color: k % 3 == 0 ? hex(0xFFF3C4) : white)
+            }
+        }
+        // 頭（朝左）
+        let head = CGMutablePath()
+        head.move(to: CGPoint(x: 72, y: 76))
+        head.addCurve(to: CGPoint(x: 26, y: 88), control1: CGPoint(x: 60, y: 70), control2: CGPoint(x: 30, y: 76))
+        head.addQuadCurve(to: CGPoint(x: 40, y: 104), control: CGPoint(x: 24, y: 100))
+        head.addCurve(to: CGPoint(x: 78, y: 98), control1: CGPoint(x: 54, y: 112), control2: CGPoint(x: 72, y: 110))
+        head.closeSubpath()
+        // 金角
+        for (a, b) in [(CGPoint(x: 62, y: 104), CGPoint(x: 80, y: 124)), (CGPoint(x: 52, y: 106), CGPoint(x: 60, y: 126))] {
+            shape(ctx, petal(a, b, width: 6), hex(0xF2C94C), lineWidth: 1.5)
+        }
+        gradientFill(ctx, head, [hex(0x2B3A8C), purple], from: CGPoint(x: 26, y: 90), to: CGPoint(x: 78, y: 100))
+        line(ctx, head, outline, width: 2.2)
+        // 鬍鬚
+        let whisker = quad(CGPoint(x: 30, y: 90), CGPoint(x: 6, y: 72 + bob), CGPoint(x: 12, y: 92))
+        line(ctx, whisker, glow, width: 2)
+        bossEye(ctx, CGPoint(x: 44, y: 96), size: 4.5, hit: hit, glow: hit ? nil : glow, left: true)
+        line(ctx, segment(CGPoint(x: 28, y: 88), CGPoint(x: 42, y: 86)), outline, width: 1.6)   // 嘴
+        if hit { hitBurst(ctx, at: CGPoint(x: 60, y: 52)) }
+    }
+    // 飄著的星光（每格位置不同）
+    for k in 0..<6 {
+        let n = frame * 13 + k * 5 + (hit ? 99 : 0)
+        sparkle(ctx, at: CGPoint(x: 20 + 120 * noise(n), y: 20 + 100 * noise(n + 1)), size: 2 + 3 * noise(n + 2),
+                color: k % 2 == 0 ? hex(0xFFF3C4) : white)
+    }
+}
+
+let bosses: [(id: String, draw: (CGContext, Int, Bool) -> Void)] = [
+    ("meadow", drawSlimeKing), ("forest", drawTreant), ("castle", drawDarkKnight), ("temple", drawStarDragon),
+]
+
 // MARK: - 輸出
 
 func renderPNG(width: CGFloat = canvas, height: CGFloat = canvas, offset: CGFloat = offsetX, _ draw: (CGContext) -> Void) -> Data {
@@ -2488,6 +2868,38 @@ func renderPNG(width: CGFloat = canvas, height: CGFloat = canvas, offset: CGFloa
     draw(ctx)
     let rep = NSBitmapImageRep(cgImage: ctx.makeImage()!)
     return rep.representation(using: .png, properties: [:])!
+}
+
+// 像素風格：先在很粗的格子上（每格 cell 個設計單位）不開反鋸齒地畫，半透明的地方二選一變成全透明或不透明，
+// 再用最近鄰放大回正常尺寸，看起來就是一格一格的像素圖。
+func renderPixelPNG(width: CGFloat, height: CGFloat, cell: CGFloat, _ draw: (CGContext) -> Void) -> Data {
+    let gw = Int((width / cell).rounded(.up)), gh = Int((height / cell).rounded(.up))
+    let space = CGColorSpace(name: CGColorSpace.sRGB)!
+    let info = CGImageAlphaInfo.premultipliedLast.rawValue
+    let low = CGContext(data: nil, width: gw, height: gh, bitsPerComponent: 8, bytesPerRow: gw * 4, space: space, bitmapInfo: info)!
+    low.setShouldAntialias(false)
+    low.setAllowsAntialiasing(false)
+    low.scaleBy(x: 1 / cell, y: 1 / cell)
+    low.setLineJoin(.miter)
+    low.setLineCap(.square)
+    pixelCell = cell
+    draw(low)
+    pixelCell = 0
+    let px = low.data!.bindMemory(to: UInt8.self, capacity: gw * gh * 4)
+    for i in 0..<(gw * gh) {
+        let a = Int(px[i * 4 + 3])
+        if a < 110 {
+            for k in 0..<4 { px[i * 4 + k] = 0 }
+        } else if a < 255 {
+            for k in 0..<3 { px[i * 4 + k] = UInt8(min(255, Int(px[i * 4 + k]) * 255 / a)) }
+            px[i * 4 + 3] = 255
+        }
+    }
+    let out = CGContext(data: nil, width: Int(width * scale), height: Int(height * scale), bitsPerComponent: 8, bytesPerRow: 0,
+                        space: space, bitmapInfo: info)!
+    out.interpolationQuality = .none
+    out.draw(low.makeImage()!, in: CGRect(x: 0, y: 0, width: CGFloat(gw) * cell * scale, height: CGFloat(gh) * cell * scale))
+    return NSBitmapImageRep(cgImage: out.makeImage()!).representation(using: .png, properties: [:])!
 }
 
 let fm = FileManager.default
@@ -2521,6 +2933,15 @@ for spec in actions where previewFrames == nil {
     }
 }
 
+if previewFrames == nil || ProcessInfo.processInfo.environment["BOSS_PREVIEW"] != nil {
+    for boss in bosses {
+        for (name, frame, hit) in [("idle_0", 0, false), ("idle_1", 1, false), ("hit", 0, true)] {
+            try write(renderPixelPNG(width: bossWidth, height: bossHeight, cell: bossPixel) { boss.draw($0, frame, hit) },
+                      "props/boss_\(boss.id)_\(name).png")
+            count += 1
+        }
+    }
+}
 if previewFrames == nil {
 try write(renderPNG(height: canopyHeight, offset: 0) { drawCanopy($0) }, "props/parachute.png")
 try write(renderPNG(height: canopyHeight, offset: 0) { drawUmbrellaProp($0) }, "props/umbrella_open.png")

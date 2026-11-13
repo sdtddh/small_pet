@@ -1,5 +1,10 @@
 {
   "actions" : {
+    "attack" : {
+      "fps" : 9,
+      "frames" : 6,
+      "loop" : true
+    },
     "dance" : {
       "fps" : 8,
       "frames" : 16,

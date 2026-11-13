@@ -19,6 +19,7 @@ enum PetAction: String, CaseIterable {
     case typing     // 坐在電腦桌前打電腦
     case swing      // 盪鞦韆
     case fly        // 開飛機
+    case attack     // 在地下城拿劍砍 boss（第 3 格砍中）
 
     // 選單上顯示的名字。
     var displayName: String {
@@ -38,6 +39,7 @@ enum PetAction: String, CaseIterable {
         case .typing: "打電腦"
         case .swing: "盪鞦韆"
         case .fly: "開飛機"
+        case .attack: "戰鬥"
         }
     }
 
@@ -54,7 +56,7 @@ enum PetAction: String, CaseIterable {
         case .jump: 5
         case .run: 4
         case .dance: 4
-        case .fall, .dragged, .parachute, .parasol, .eat, .typing, .swing, .fly: 0
+        case .fall, .dragged, .parachute, .parasol, .eat, .typing, .swing, .fly, .attack: 0
         }
     }
 
@@ -72,6 +74,7 @@ enum PetAction: String, CaseIterable {
         case .swing: 15...30
         case .fly: 20...35      // 在天上繞多久，之後才開始降落
         case .jump, .fall, .dragged, .parachute, .parasol: 0...0   // 由物理決定何時結束
+        case .attack: 0...0     // 打到冒險時間結束為止
         }
     }
 }

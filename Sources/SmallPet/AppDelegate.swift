@@ -14,6 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusWindow: StatusWindowController!
     private var scenery: Scenery!
     private var inputSync: InputSync!
+    private var boss: BossWindow?
+    // 試打 boss：不算冒險次數、不存檔、不給戰利品，打 15 秒看看效果。
+    private var trial: (dungeon: Dungeon, startedAt: Date, endsAt: Date)?
+    private static let trialSeconds: TimeInterval = 15
 
     private var statusItem: NSStatusItem!
     private var timer: Timer?
@@ -59,8 +63,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pet.onDragHover = { [weak self] frame in self?.highlightProp(under: frame) }
         pet.onDrop = { [weak self] frame in self?.dropAction(at: frame) }
         pet.speech.follow(pet.window.frame)
-        if stats.run != nil {
-            pet.hideAway()   // 上次關掉 App 時她還在冒險，時間到了會在動畫迴圈裡回家
+        pet.onAttackHit = { [weak self] in self?.bossHit() }
+        if let run = stats.run, let dungeon = Dungeon.find(run.dungeonID) {
+            beginBattle(dungeon)   // 上次關掉 App 時她還在冒險：接著打，時間到了在動畫迴圈裡結算
         } else {
             pet.speech.greet()
         }
@@ -189,8 +194,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if let run = stats.run, let dungeon = Dungeon.find(run.dungeonID) {
             let minutes = max(1, Int(ceil(run.endsAt.timeIntervalSinceNow / 60)))
-            menu.addItem(NSMenuItem(title: "冒險中：\(dungeon.name)（約 \(minutes) 分鐘後回來）", action: nil, keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: "戰鬥中：\(dungeon.name)的\(dungeon.bossName)（約 \(minutes) 分鐘後分出勝負）", action: nil, keyEquivalent: ""))
         }
+
+        // 試打 boss：在家、沒在冒險時才能打
+        let trialMenu = NSMenu()
+        for dungeon in Dungeon.all {
+            let item = NSMenuItem(title: "\(dungeon.name)：\(dungeon.bossName)", action: home ? #selector(startTrial(_:)) : nil, keyEquivalent: "")
+            item.representedObject = dungeon.id
+            item.target = self
+            trialMenu.addItem(item)
+        }
+        let trialItem = NSMenuItem(title: "試打 boss（不算冒險次數）", action: nil, keyEquivalent: "")
+        trialItem.submenu = trialMenu
+        menu.addItem(trialItem)
 
         let wardrobeItem = NSMenuItem(title: "衣櫃…", action: #selector(openWardrobe), keyEquivalent: "")
         wardrobeItem.target = self
@@ -245,6 +262,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard on != pet.concealed else { return }
         pet.setConcealed(on)
         scenery.setConcealed(on, below: pet.window)
+        if let boss {
+            if on { boss.orderOut(nil) } else { boss.order(.below, relativeTo: pet.window.windowNumber) }
+        }
     }
 
     @objc private func toggleScenery() {
@@ -401,27 +421,122 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .busy?:
             break
         case nil:
-            pet.speech.sayText("出發去\(dungeon.name)冒險囉！")
-            pet.leave()
+            pet.speech.sayText("出發去\(dungeon.name)！遇到了\(dungeon.bossName)，看劍！⚔️")
+            beginBattle(dungeon)
         }
+    }
+
+    // 在她旁邊叫出這個地下城的 boss，讓她面向 boss 開始砍。右邊放得下就放右邊，不然放左邊。
+    private func beginBattle(_ dungeon: Dungeon) {
+        guard let visible = NSScreen.main?.visibleFrame else { return }
+        scenery.releaseAll(below: pet.window)
+        let petWidth = pet.window.frame.width
+        let bossWidth = BossWindow.artSize.width
+        let reach: CGFloat = 92          // 劍尖大概在她視窗左邊算起 92 點的地方
+        var x = pet.x
+        var bossX = x + reach
+        var facing: CGFloat = 1
+        if bossX + bossWidth > visible.maxX {
+            bossX = x + petWidth - reach - bossWidth
+            facing = -1
+            if bossX < visible.minX {   // 左邊也放不下：把她挪一下
+                bossX = visible.minX
+                x = bossX + bossWidth + reach - petWidth
+            }
+        }
+        if x != pet.x { pet.show(at: NSPoint(x: x, y: visible.minY)) }
+        let window = BossWindow(dungeon: dungeon, sprites: sprites, facingLeft: facing > 0)
+        window.onClick = { [weak self] in self?.bossClicked() }
+        window.setFrameOrigin(NSPoint(x: bossX, y: visible.minY))
+        if !pet.concealed { window.order(.below, relativeTo: pet.window.windowNumber) }
+        boss?.orderOut(nil)
+        boss = window
+        pet.startBattle(facing: facing)
+    }
+
+    // 試打：跟真的冒險一樣叫出 boss 開打，15 秒後依現在的戰鬥力算一次勝負，但什麼都不記錄。
+    @objc private func startTrial(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, let dungeon = Dungeon.find(id) else { return }
+        setEverythingConcealed(false)
+        guard pet.canAct, stats.run == nil, trial == nil else { return }
+        let now = Date()
+        trial = (dungeon, now, now.addingTimeInterval(Self.trialSeconds))
+        pet.speech.sayText("試打\(dungeon.bossName)！看劍！⚔️")
+        beginBattle(dungeon)
+    }
+
+    // 你點了 boss：她馬上多砍一刀，冒險時間少 1 秒（試打的話是試打時間少 1 秒）。
+    private func bossClicked() {
+        guard pet.travel == .fighting, let boss else { return }
+        pet.quickSlash()
+        bossHit()
+        if let t = trial {
+            trial = (t.dungeon, t.startedAt, t.endsAt.addingTimeInterval(-1))
+        } else {
+            stats.shortenRun(by: 1)
+        }
+        boss.showTimeBonus("⏱ -1 秒")
+    }
+
+    // 她砍中一刀：傷害大概是戰鬥力上下浮動。
+    private func bossHit() {
+        let base = max(1, stats.power)
+        boss?.hit(damage: Int.random(in: max(1, base * 3 / 4)...(base * 5 / 4 + 1)))
+    }
+
+    // 每一幀：血條跟著冒險進度往下掉。
+    private func updateBoss() {
+        guard let boss else { return }
+        if let trial {
+            let total = trial.endsAt.timeIntervalSince(trial.startedAt)
+            boss.update(progress: 1 - trial.endsAt.timeIntervalSinceNow / total, time: CACurrentMediaTime())
+            return
+        }
+        guard let run = stats.run, let dungeon = Dungeon.find(run.dungeonID) else { return }
+        let remaining = run.endsAt.timeIntervalSinceNow
+        boss.update(progress: 1 - remaining / dungeon.duration, time: CACurrentMediaTime())
+    }
+
+    // 試打時間到：用跟真的冒險一樣的成功率算勝負，只講結果，不給東西。
+    private func checkTrial() {
+        guard let trial, pet.travel == .fighting, Date() >= trial.endsAt else { return }
+        self.trial = nil
+        let won = Double.random(in: 0..<1) < trial.dungeon.successChance(power: stats.power)
+        let finishing = boss
+        boss = nil
+        pet.endBattle()
+        if won {
+            pet.speech.sayText("試打成功！打倒\(trial.dungeon.bossName)了～")
+            pet.interlude(.dance)
+        } else {
+            pet.speech.sayText("試打輸了…\(trial.dungeon.bossName)好強")
+            pet.interlude(.sit, duration: 6)
+        }
+        finishing?.finish(won: won) { _ = finishing }
     }
 
     // 動畫迴圈每一幀呼叫：她在外面、時間也到了，就結算並讓她跑回來報告。
     private func checkRun() {
-        guard pet.travel == .away, stats.runFinished,
+        if trial != nil { return checkTrial() }
+        guard pet.travel == .fighting, stats.runFinished,
               let result = stats.finishRun(outfits: sprites.manifest.outfits) else { return }
-        pet.arrive { [weak self] in
-            guard let self else { return }
-            switch result.reward {
-            case .outfit(_, let name)?:
-                self.pet.speech.sayText("我回來了！在\(result.dungeon.name)拿到「\(name)」✨")
-                self.pet.interlude(.dance)
-            case .snack?:
-                self.pet.speech.sayText("我回來了！在\(result.dungeon.name)撿到零食～")
-                self.pet.interlude(.dance)
-            case nil:
-                self.pet.speech.say("lose")
-            }
+        let won = result.reward != nil
+        let finishing = boss
+        boss = nil
+        pet.endBattle()
+        switch result.reward {
+        case .outfit(_, let name)?:
+            pet.speech.sayText("打倒\(result.dungeon.bossName)了！拿到「\(name)」✨")
+            pet.interlude(.dance)
+        case .snack?:
+            pet.speech.sayText("打倒\(result.dungeon.bossName)了！撿到零食～")
+            pet.interlude(.dance)
+        case nil:
+            pet.speech.say("lose")
+            pet.interlude(.sit, duration: 6)
+        }
+        if let finishing {
+            finishing.finish(won: won) { _ = finishing }   // 動畫做完才放掉視窗
         }
     }
 
@@ -449,6 +564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.lastTick = now
                 guard !self.pet.concealed else { return }   // 藏起來時暫停；冒險時間到了等顯示回來才回家
                 self.pet.tick(dt: dt)
+                self.updateBoss()
                 self.checkRun()
                 self.checkProps()
             }

@@ -10,19 +10,20 @@ struct Dungeon: Identifiable {
     let recommendedPower: Int
     let minutes: Double
     let loot: [String]          // 服裝 id，或 Dungeon.snack
+    let bossName: String        // 冒險時她在桌面上砍的 boss（圖在 Resources/props/boss_<id>_*.png）
 
     static let snack = "snack"
 
     static let all: [Dungeon] = [
         Dungeon(id: "meadow", name: "草原", recommendedPower: 15, minutes: 10,
-                loot: ["straw_hat", "balloon", "bell_collar", snack]),
+                loot: ["straw_hat", "balloon", "bell_collar", snack], bossName: "草原史萊姆王"),
         Dungeon(id: "forest", name: "森林", recommendedPower: 40, minutes: 30,
-                loot: ["witch_hat", "cape", "goggles", "backpack", snack]),
+                loot: ["witch_hat", "cape", "goggles", "backpack", snack], bossName: "古樹樹精"),
         Dungeon(id: "castle", name: "城堡", recommendedPower: 80, minutes: 60,
-                loot: ["crown", "ribbon", "wings", snack]),
+                loot: ["crown", "ribbon", "wings", snack], bossName: "黑暗騎士"),
         // 最高難度：成功也只有 1/4 機會掉 VIP 翅膀，其他是零食。
         Dungeon(id: "temple", name: "星空神殿", recommendedPower: 150, minutes: 120,
-                loot: ["vip_wings", snack, snack, snack]),
+                loot: ["vip_wings", snack, snack, snack], bossName: "星空神龍"),
     ]
 
     static func find(_ id: String) -> Dungeon? { all.first { $0.id == id } }

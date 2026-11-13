@@ -87,7 +87,13 @@ final class Pet {
     var outingChance = 0.35
 
     // 出門冒險：跑出螢幕 → 藏起來 → 時間到從螢幕邊跑回來。
-    enum Travel { case none, leaving, away, arriving }
+    // fighting：在桌面上砍地下城的 boss（冒險期間一直打，時間到才結束）。
+    enum Travel { case none, leaving, away, arriving, fighting }
+
+    // 砍 boss 時每砍中一刀呼叫（attack 動作的第 3 格）。
+    var onAttackHit: (() -> Void)?
+    private static let attackImpactFrame = 3
+    private var lastAttackFrame = -1
     private(set) var travel = Travel.none
     private var afterTravel: (() -> Void)?
 
@@ -385,7 +391,13 @@ final class Pet {
 
         view.facingLeft = direction < 0
         let umbrella = action == .parachute && holdsUmbrella
-        view.show(umbrella ? .parasol : action, frame: currentFrame())
+        let frame = currentFrame()
+        view.show(umbrella ? .parasol : action, frame: frame)
+        // 砍中的那一格：通知 boss 被砍
+        if action == .attack {
+            if frame == Self.attackImpactFrame, lastAttackFrame != frame { onAttackHit?() }
+            lastAttackFrame = frame
+        }
         window.setFrameOrigin(NSPoint(x: posX, y: posY))
         canopy.setOpen(action == .parachute && !umbrella, above: window.frame)
         umbrellaCanopy.setFlipped(direction < 0)
@@ -519,8 +531,38 @@ final class Pet {
         flightPitch += (target - flightPitch) * min(1, 4 * t)
     }
 
-    // 出門 / 回家途中：一直跑，不受螢幕邊界限制。
+    // MARK: - 地下城：砍 boss
+
+    // 開打：原地拿劍，面向 boss（facing 1 右、-1 左）。
+    func startBattle(facing: CGFloat) {
+        vx = 0
+        vy = 0
+        posY = ground
+        setAction(.attack)
+        direction = facing
+        travel = .fighting
+        lastAttackFrame = -1
+        if !concealed { window.orderFrontRegardless() }
+    }
+
+    // 你點了 boss：馬上砍中一刀（直接跳到砍中的那一格），之後照常繼續揮。
+    func quickSlash() {
+        guard travel == .fighting, action == .attack else { return }
+        let fps = sprites.info(.attack).fps
+        actionTime = Double(Self.attackImpactFrame) / max(fps, 1) + 0.001
+        lastAttackFrame = Self.attackImpactFrame   // 這一刀由點擊算，不要再自動多算一次
+    }
+
+    // 打完了：回到平常的樣子（之後要跳舞慶祝或坐下來沮喪，由呼叫的人決定）。
+    func endBattle() {
+        guard travel == .fighting else { return }
+        travel = .none
+        finishAirAction()
+    }
+
+    // 出門 / 回家途中：一直跑，不受螢幕邊界限制。打 boss 時站在原地。
     private func updateTravel(t: CGFloat, minX: CGFloat, maxX: CGFloat) {
+        if travel == .fighting { return }
         posX += tuning.runSpeed * direction * t
         switch travel {
         case .leaving where posX < minX - size.width || posX > maxX + size.width:
