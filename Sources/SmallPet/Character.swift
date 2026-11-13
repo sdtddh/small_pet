@@ -1,16 +1,37 @@
 // Character.swift —— 可以切換的角色。
 //
-// 每個角色有自己的資料夾 Resources/characters/<id>/（本體、服裝、manifest.json、phrases.json），
-// 自己的存檔（等級、背包、地下城）和自己的衣櫃。家具（Resources/props）大家共用。
+// 每個角色有自己的資料夾 Resources/characters/<id>/（character.json、臉、manifest.json、phrases.json），
+// 自己的存檔（等級、背包、地下城）和自己的衣櫃。髮型、衣服、服裝（Resources/shared）和家具（Resources/props）大家共用。
+// 新增角色：建資料夾、寫 character.json，App 會自動掃到。
 // 切換角色時 App 會自動重開，所有東西重新載入成新角色的。
 import AppKit
 
+// characters/<id>/character.json：名字、選單順序、預設穿什麼（臉的畫法只有產生器用得到）。
+struct CharacterInfo: Decodable {
+    let id: String
+    let name: String
+    let order: Int?
+    let defaults: [String: String?]?   // 部位 → id：hair、clothes、ears、tail、earrings（null = 不戴）
+}
+
 enum Character {
-    // 選單上的順序。id 要跟資料夾名稱一樣。
-    static let all: [(id: String, name: String)] = [
-        ("amiya", "阿米婭"),
-        ("rim", "理芽"),
-    ]
+    // 所有有 character.json 的角色，依 order（再依 id）排成選單順序。id 要跟資料夾名稱一樣。
+    static let infos: [CharacterInfo] = {
+        guard let dir = Bundle.module.url(forResource: "Resources", withExtension: nil)?.appendingPathComponent("characters"),
+              let ids = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return [] }
+        return ids.compactMap { id in
+            (try? Data(contentsOf: dir.appendingPathComponent("\(id)/character.json")))
+                .flatMap { try? JSONDecoder().decode(CharacterInfo.self, from: $0) }
+        }
+        .sorted { ($0.order ?? .max, $0.id) < ($1.order ?? .max, $1.id) }
+    }()
+
+    static let all: [(id: String, name: String)] = {
+        let list = infos.map { (id: $0.id, name: $0.name) }
+        return list.isEmpty ? [("amiya", "阿米婭")] : list   // 舊素材沒有 character.json
+    }()
+
+    static func info(_ id: String) -> CharacterInfo? { infos.first { $0.id == id } }
 
     private static let defaultsKey = "character"
 

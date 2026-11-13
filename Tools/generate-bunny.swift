@@ -4,8 +4,9 @@
 //     swift Tools/generate-bunny.swift            # 阿米婭（預設）
 //     swift Tools/generate-bunny.swift rim        # 理芽
 //
-// 角色的本體、服裝、manifest.json 寫到 Sources/SmallPet/Resources/characters/<角色>/，
-// 跟角色無關的服裝 / 髮型 / 衣服圖層寫到 Resources/shared/（見 isShared），
+// 角色只剩「臉」和「預設穿什麼」，寫在 Resources/characters/<角色>/character.json；
+// 產生器依它畫這個角色的臉（face、features），寫到 characters/<角色>/，連同 manifest.json（動作、sprite sheet 切法）。
+// 髮型、衣服、服裝、角色特徵物件（兔耳…）跟角色無關，寫到 Resources/shared/，清單是 shared/items.json。
 // 家具等道具圖寫到 Resources/props/（所有角色共用）。
 //
 // 做法跟小貓版一樣：每個動作的每一格是一組「姿勢」(Pose)，本體和服裝用
@@ -23,16 +24,50 @@ let ground: CGFloat = 4          // 腳底的 y 座標
 let pivot = CGPoint(x: 48, y: ground)   // 壓扁 / 前傾的支點（腳底中央）
 
 // 第一個參數是角色 id，第二個（可省略）是 Resources 資料夾。
-let characterNames = ["amiya": "阿米婭", "rim": "理芽"]
 let character = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "amiya"
-guard let characterName = characterNames[character] else {
-    fatalError("不認識的角色 \(character)，可用：\(characterNames.keys.sorted())")
-}
-let rim = character == "rim"
 let resourcesRoot = URL(fileURLWithPath: CommandLine.arguments.count > 2
     ? CommandLine.arguments[2]
     : "Sources/SmallPet/Resources")
 let outputRoot = resourcesRoot.appendingPathComponent("characters/\(character)")
+
+// MARK: - 角色設定（character.json）
+
+// 每個角色的資料夾裡有一份 character.json：名字、臉（眼睛 / 嘴巴的畫法和顏色）、預設穿什麼。
+struct CharacterInfo {
+    let id: String
+    let name: String
+    let eyes: String        // 眼睛畫法：round（阿米婭）、rim（理芽）
+    let eyeDark: UInt32
+    let eyeIris: UInt32
+    let mouth: String       // 嘴巴畫法：omega（ω 嘴）、smile（小微笑）
+    let defaults: [String: String]   // 部位 → id：hair、clothes、ears、tail、earrings（null / 省略 = 不戴）
+}
+
+func loadCharacter(_ url: URL) -> CharacterInfo? {
+    guard let data = try? Data(contentsOf: url),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let id = json["id"] as? String, let name = json["name"] as? String else { return nil }
+    let face = json["face"] as? [String: Any] ?? [:]
+    func color(_ key: String, _ fallback: UInt32) -> UInt32 {
+        (face[key] as? String).flatMap { UInt32($0.replacingOccurrences(of: "#", with: ""), radix: 16) } ?? fallback
+    }
+    return CharacterInfo(
+        id: id, name: name,
+        eyes: face["eyes"] as? String ?? "round",
+        eyeDark: color("eyeDark", 0x1F3F66), eyeIris: color("eyeIris", 0x46C1DE),
+        mouth: face["mouth"] as? String ?? "omega",
+        defaults: (json["defaults"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String })
+}
+
+// 所有角色（物件的「來源角色」要顯示名字）。
+let allCharacters: [CharacterInfo] = {
+    let dir = resourcesRoot.appendingPathComponent("characters")
+    let ids = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+    return ids.sorted().compactMap { loadCharacter(dir.appendingPathComponent("\($0)/character.json")) }
+}()
+guard let me = allCharacters.first(where: { $0.id == character }) else {
+    fatalError("找不到 characters/\(character)/character.json，可用：\(allCharacters.map(\.id))")
+}
 
 // MARK: - 顏色
 
@@ -43,23 +78,28 @@ func hex(_ v: UInt32, _ a: CGFloat = 1) -> CGColor {
 }
 
 let outline = hex(0x2B2230)
-// 理芽：藍色鮑伯頭、橘色帽兜內裡、紅色線條、橘紅裙、藍鞋。
-let hair = rim ? hex(0x2336D6) : hex(0x8A5A3C)
-let hairDark = rim ? hex(0x1A259C) : hex(0x6E452E)
-let hairShine = rim ? hex(0x9DB2FF) : hex(0xCDEBF7)
 let earInner = hex(0xE9C6B4)
 let skin = hex(0xFFEBDF)
 let cheek = hex(0xF7A1A8, 0.6)
-let eyeDark = rim ? hex(0x1B2268) : hex(0x1F3F66)
-let eyeIris = rim ? hex(0x4C6BF0) : hex(0x46C1DE)
+let eyeDark = hex(me.eyeDark)
+let eyeIris = hex(me.eyeIris)
 let jacket = hex(0x2A2A33)
-let trim = rim ? hex(0xF29A2E) : hex(0x5CD0E0)        // 帽兜內裡
-let jacketLine = rim ? hex(0xD8433A) : trim             // 外套線條、袖口
-let top = rim ? hex(0x2B2348) : hex(0x34304A)
-let skirt = rim ? hex(0xE8542A) : hex(0x3F7EC0)
-let skirtLight = rim ? hex(0xF27A4A) : hex(0x6FA6DC)
 let legging = hex(0x24242C)
-let shoe = rim ? hex(0x3446C8) : hex(0x17171D)
+
+// 阿米婭 / 理芽原本的髮型和外套的配色（見「外觀」的 originalHair、originalJacket）。
+struct Palette {
+    let hair, hairDark, hairShine: CGColor
+    let trim: CGColor        // 帽兜內裡
+    let jacketLine: CGColor  // 外套線條、袖口
+    let top, skirt, skirtLight, shoe: CGColor
+}
+let amiyaPalette = Palette(hair: hex(0x8A5A3C), hairDark: hex(0x6E452E), hairShine: hex(0xCDEBF7),
+                           trim: hex(0x5CD0E0), jacketLine: hex(0x5CD0E0), top: hex(0x34304A),
+                           skirt: hex(0x3F7EC0), skirtLight: hex(0x6FA6DC), shoe: hex(0x17171D))
+// 理芽：藍色鮑伯頭、橘色帽兜內裡、紅色線條、橘紅裙、藍鞋。
+let rimPalette = Palette(hair: hex(0x2336D6), hairDark: hex(0x1A259C), hairShine: hex(0x9DB2FF),
+                         trim: hex(0xF29A2E), jacketLine: hex(0xD8433A), top: hex(0x2B2348),
+                         skirt: hex(0xE8542A), skirtLight: hex(0xF27A4A), shoe: hex(0x3446C8))
 let gemRed = hex(0xE0383A)
 let gemGreen = hex(0x2FB36A)
 let white = hex(0xFFFFFF)
@@ -229,7 +269,7 @@ let bodyItems = [
     BodyItem(id: "diamond_earrings", name: "菱形耳環", slot: "earrings", part: .earrings, origin: "rim", colorFromHair: false),
 ]
 // 身上的物件。預設是角色原本的樣子；產生物件圖層時會暫時改掉。
-let defaultItems: Set<String> = rim ? ["diamond_earrings"] : ["bunny_ears", "bunny_tail"]
+let defaultItems = Set(bodyItems.filter { me.defaults[$0.slot] == $0.id }.map(\.id))
 var items = defaultItems
 
 func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
@@ -441,7 +481,7 @@ func drawHead(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
     ctx.setLineCap(.round)
     if p.mouthOpen {
         shape(ctx, ellipse(54.5, 42, 5, 4.5), hex(0xC8504F), lineWidth: 1.5)
-    } else if rim {
+    } else if me.mouth == "smile" {
         // 理芽：小小的微笑
         let mouth = CGMutablePath()
         mouth.move(to: CGPoint(x: 52, y: 43.5))
@@ -457,7 +497,7 @@ func drawHead(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
 }
 
 // 理芽的辮子：一節一節的小橢圓，尾端綁一小撮。sway 讓它跟著動作微微擺。
-func drawBraid(_ ctx: CGContext, top: CGPoint, bottom: CGPoint, sway: CGFloat) {
+func drawBraid(_ ctx: CGContext, top: CGPoint, bottom: CGPoint, sway: CGFloat, _ hair: CGColor, _ hairDark: CGColor) {
     let n = 4
     let end = CGPoint(x: bottom.x - sway * 3, y: bottom.y)
     for i in 0..<n {
@@ -516,7 +556,7 @@ func drawRimEye(_ ctx: CGContext, _ c: CGPoint, wide: Bool) {
 
 func drawEye(_ ctx: CGContext, _ c: CGPoint, _ eyes: Eyes) {
     ctx.setLineCap(.round)
-    if rim && (eyes == .open || eyes == .wide) { return drawRimEye(ctx, c, wide: eyes == .wide) }
+    if me.eyes == "rim" && (eyes == .open || eyes == .wide) { return drawRimEye(ctx, c, wide: eyes == .wide) }
     switch eyes {
     case .open:
         let eye = ellipse(c.x, c.y, 8.5, 11)
@@ -1291,6 +1331,7 @@ struct HairStyle {
     let backOfHead: Draw    // 臉後面的頭髮
     let front: Draw         // 臉前面的頭髮：兩側、瀏海、光澤、髮飾
     let backView: Draw      // 背對畫面時的後腦（兔耳已經先畫好了）
+    var origin: String? = nil   // 原本屬於哪個角色（衣櫃顯示成「短髮（阿米婭）」）
 }
 
 struct ClothesStyle {
@@ -1305,6 +1346,7 @@ struct ClothesStyle {
     var shoeHeight: CGFloat = 6.5    // 大於 6.5 是厚底鞋
     let torso: Draw         // 正面的衣服（上半身座標系）
     let torsoBack: Draw     // 背面的衣服
+    var origin: String? = nil
 }
 
 struct Look {
@@ -1367,17 +1409,20 @@ func drawBow(_ ctx: CGContext, at c: CGPoint, size s: CGFloat, _ color: CGColor,
 // ── 髮型 ──
 
 // 角色原本的髮型（阿米婭的棕髮；理芽的藍髮 + 小辮子、耳環）。
-let amiyaHair = HairStyle(
-    id: "original", name: characterName, color: hair, dark: hairDark, shine: hairShine,
+// 角色原本的髮型：阿米婭的短髮（右側一束），理芽的辮子短髮（右側辮子，背面換到左側）。
+func originalHair(id: String, name: String, origin: String, _ c: Palette, braid: Bool) -> HairStyle {
+    let (hair, hairDark, hairShine) = (c.hair, c.hairDark, c.hairShine)
+    return HairStyle(
+    id: id, name: name, color: hair, dark: hairDark, shine: hairShine,
     backOfHead: { ctx, _ in
         shape(ctx, ellipse(50, 58, 54, 46), hairDark)
     },
     front: { ctx, p in
         // 兩側垂下的髮束
         shape(ctx, petal(pt(31, 62), pt(31, 37), width: 7), hair, lineWidth: 1.8)
-        if rim {
+        if braid {
             // 臉旁邊的辮子（菱形耳環是另外的物件 diamond_earrings，畫在 drawHead）
-            drawBraid(ctx, top: pt(75, 58), bottom: pt(76, 44), sway: p.ears)
+            drawBraid(ctx, top: pt(75, 58), bottom: pt(76, 44), sway: p.ears, hair, hairDark)
         } else {
             shape(ctx, petal(pt(76, 60), pt(74, 38), width: 6), hair, lineWidth: 1.8)
         }
@@ -1397,11 +1442,15 @@ let amiyaHair = HairStyle(
             line(ctx, quad(pt(50, 78), end, ctrl), hairDark, width: 1.4)
         }
         hairGloss(ctx, hairShine, back: true)
-        if rim {   // 背面：辮子在左側（背對時換邊）
-            drawBraid(ctx, top: pt(30, 58), bottom: pt(31, 44), sway: p.ears)
+        if braid {   // 背面：辮子在左側（背對時換邊）
+            drawBraid(ctx, top: pt(30, 58), bottom: pt(31, 44), sway: p.ears, hair, hairDark)
         }
-    }
-)
+    },
+    origin: origin
+    )
+}
+let amiyaHair = originalHair(id: "amiya_hair", name: "短髮", origin: "amiya", amiyaPalette, braid: false)
+let rimHair = originalHair(id: "rim_hair", name: "辮子短髮", origin: "rim", rimPalette, braid: true)
 
 // ── 髮型用的小工具 ──
 
@@ -1691,6 +1740,7 @@ func shortBob() -> HairStyle {
 
 let hairStyles: [HairStyle] = [
     amiyaHair,
+    rimHair,
     jiraiTwinTails(),
     wolfMullet(id: "wolf_milktea", name: "日系鯔魚頭・奶茶", base: hex(0xC9A07E), dark: hex(0xA57D5E),
                shine: hex(0xF5E2C8), accent: hex(0xC9A07E)),
@@ -1719,11 +1769,13 @@ func pleatedSkirt(_ ctx: CGContext, _ color: CGColor, _ pleat: CGColor, back: Bo
 }
 
 // 角色原本的衣服（阿米婭的黑外套 + 藍裙；理芽的紅線外套 + 胸前菱形 + 橘紅裙）。
-let amiyaClothes = ClothesStyle(
-    id: "original", name: characterName, sleeve: jacket, cuff: jacketLine, legging: legging, shoe: shoe,
+func originalJacket(id: String, name: String, origin: String, _ c: Palette, rimStyle: Bool) -> ClothesStyle {
+    let (trim, jacketLine, top, skirt, skirtLight) = (c.trim, c.jacketLine, c.top, c.skirt, c.skirtLight)
+    return ClothesStyle(
+    id: id, name: name, sleeve: jacket, cuff: jacketLine, legging: legging, shoe: c.shoe,
     torso: { ctx, _ in
         pleatedSkirt(ctx, skirt, skirtLight, back: false)
-        if rim {
+        if rimStyle {
             // 深紫內搭，胸前紅白菱形
             shape(ctx, rounded(44, 24, 14, 14, 3), top, lineWidth: 1.6)
             shape(ctx, polygon([pt(51, 35), pt(54.5, 30), pt(51, 25), pt(47.5, 30)]), gemRed, lineWidth: 1.2)
@@ -1740,7 +1792,7 @@ let amiyaClothes = ClothesStyle(
         shape(ctx, rounded(55.5, 17, 10, 21, 5), jacket)
         line(ctx, segment(pt(45.5, 18.5), pt(45.5, 36)), jacketLine, width: 2)
         line(ctx, segment(pt(56.5, 18.5), pt(56.5, 36)), jacketLine, width: 2)
-        if rim {   // 外套上的紅色折線
+        if rimStyle {   // 外套上的紅色折線
             for (a, b, c) in [(pt(36, 30), pt(40, 26), pt(43, 29)), (pt(58, 29), pt(61, 26), pt(64, 30))] {
                 let z = CGMutablePath(); z.move(to: a); z.addLine(to: b); z.addLine(to: c)
                 line(ctx, z, jacketLine, width: 1.3)
@@ -1755,8 +1807,12 @@ let amiyaClothes = ClothesStyle(
         shape(ctx, rounded(34, 19, 32, 19, 6), jacket)
         shape(ctx, ellipse(50, 33, 26, 11), jacket)
         line(ctx, quad(pt(40, 32), pt(60, 32), pt(50, 26)), trim, width: 2)
-    }
-)
+    },
+    origin: origin
+    )
+}
+let amiyaClothes = originalJacket(id: "amiya_jacket", name: "帽兜外套", origin: "amiya", amiyaPalette, rimStyle: false)
+let rimClothes = originalJacket(id: "rim_jacket", name: "折線外套", origin: "rim", rimPalette, rimStyle: true)
 
 // 荷葉邊裙 + 大圓領 + 胸前蝴蝶結：地雷系、量產型共用，只換顏色。
 func frillyDress(id: String, name: String, blouse: CGColor, skirt: CGColor, lace: CGColor, collar: CGColor,
@@ -1955,10 +2011,11 @@ let gothicClothes: ClothesStyle = {
     )
 }()
 
-let clothesStyles: [ClothesStyle] = [amiyaClothes, jiraiClothes, ryousanClothes, sailorClothes, streetClothes, yukataClothes, gothicClothes]
+let clothesStyles: [ClothesStyle] = [amiyaClothes, rimClothes, jiraiClothes, ryousanClothes, sailorClothes, streetClothes, yukataClothes, gothicClothes]
 
-// 目前畫的是哪一套。產生本體與一般服裝時是阿米婭原本的樣子；產生外觀圖層時才會換。
-let defaultLook = Look(hair: amiyaHair, clothes: amiyaClothes)
+// 目前畫的是哪一套。產生本體與一般服裝時是這個角色預設的樣子（character.json）；產生外觀圖層時才會換。
+let defaultLook = Look(hair: hairStyles.first { $0.id == me.defaults["hair"] } ?? amiyaHair,
+                       clothes: clothesStyles.first { $0.id == me.defaults["clothes"] } ?? amiyaClothes)
 var look = defaultLook
 
 // MARK: - 每個動作的姿勢
@@ -2241,7 +2298,7 @@ func drawCanopy(_ ctx: CGContext) {
         let x0 = rim[k].x, x1 = rim[k + 1].x
         let panel = polygon([CGPoint(x: cx, y: 120), CGPoint(x: x0 + (x0 - cx) * 0.6, y: rimY - 4),
                              CGPoint(x: x1 + (x1 - cx) * 0.6, y: rimY - 4)])
-        shape(ctx, panel, k % 2 == 0 ? trim : white, stroke: false)
+        shape(ctx, panel, k % 2 == 0 ? amiyaPalette.trim : white, stroke: false)
     }
     ctx.restoreGState()
     for k in 1...3 {
@@ -2254,7 +2311,7 @@ func drawCanopy(_ ctx: CGContext) {
     ctx.setStrokeColor(outline)
     ctx.setLineWidth(2.2)
     ctx.strokePath()
-    shape(ctx, ellipse(cx, 76, 6, 4), skirt, lineWidth: 1.6)
+    shape(ctx, ellipse(cx, 76, 6, 4), amiyaPalette.skirt, lineWidth: 1.6)
 }
 
 // MARK: - 餐桌佈景（獨立道具圖）
@@ -2349,7 +2406,7 @@ func drawComputer(_ ctx: CGContext, on: Bool) {
         // 螢幕上的幾行字
         for (k, w) in [CGFloat(16), 24, 12, 20, 9].enumerated() {
             let y = 63 - CGFloat(k) * 3.8
-            line(ctx, segment(CGPoint(x: 97, y: y), CGPoint(x: 97 + w, y: y + w * 0.066)), k == 2 ? hex(0xF7A1A8) : skirt, width: 1.6)
+            line(ctx, segment(CGPoint(x: 97, y: y), CGPoint(x: 97 + w, y: y + w * 0.066)), k == 2 ? hex(0xF7A1A8) : amiyaPalette.skirt, width: 1.6)
         }
     }
 }
@@ -2528,8 +2585,7 @@ let fm = FileManager.default
 
 // 跟角色無關的圖層只存一份，放在 Resources/shared/（App 在角色資料夾找不到時會去那裡找）。
 // 跟角色有關的：
-//   - 用 cutOutBody 挖掉她身體的服裝（挖的是這個角色的輪廓，例如兔耳）
-//   - original 髮型 / 衣服，以及用 original 髮色畫的物件（顏色跟著角色）
+//   - 用 cutOutBody 挖掉她身體的服裝（挖的是這個角色預設造型的輪廓）
 //   - 臉（face、features）
 let sharedRoot = resourcesRoot.appendingPathComponent("shared")
 let characterOutfits: Set<String> = ["vip_wings"]
@@ -2539,12 +2595,8 @@ func isShared(_ relative: String) -> Bool {
     switch parts.first {
     case "outfits":
         return parts.count > 1 && !characterOutfits.contains(parts[1].replacingOccurrences(of: ".png", with: ""))
-    case "looks":
-        // looks/hair/<id>/{behind,back,front}.png、looks/clothes/<id>/{base,top}.png：original 是角色自己的
-        return parts.count == 4 && parts[2] != "original"
-    case "items":
-        // items/<id>.png 共用；items/<id>/<髮型>.png 用髮色畫，original 髮型的顏色跟著角色
-        return parts.count == 2 || (parts.count == 3 && parts[2] != "original.png")
+    case "looks", "items", "items.json":
+        return true
     default:
         return false
     }
@@ -2703,13 +2755,8 @@ let behindOutfits: Set<String> = ["wings", "vip_wings"]
 // 只有某些動作才疊在身體下面的服裝（撐傘飄下來時，傘柄在頭和身體後面）。
 let behindActions: [String: [String]] = ["umbrella": ["parasol"]]
 
-// manifest.json：程式靠它知道有哪些動作、幾格、多快，以及有哪些服裝。
-let manifest: [String: Any] = [
-    "name": characterName,
-    "canvas": ["width": canvas, "height": canvas],
-    "actions": Dictionary(uniqueKeysWithValues: actions.map {
-        ($0.name, ["frames": $0.frames, "fps": $0.fps, "loop": $0.loop] as [String: Any])
-    }),
+// shared/items.json：所有角色共用的清單——部位、服裝、角色特徵物件、髮型、衣服。
+let catalog: [String: Any] = [
     // 疊圖順序：前面的在下面。背後的東西最先畫，手上拿的最後畫
     "slots": [
         ["id": "back", "name": "背後"],
@@ -2717,6 +2764,12 @@ let manifest: [String: Any] = [
         ["id": "face", "name": "臉"],
         ["id": "head", "name": "頭"],
         ["id": "hand", "name": "手上"],
+    ],
+    // 畫在本體圖層之間的部位（尾巴、耳朵、耳飾），跟 slots 不同，不是疊在最上面
+    "bodySlots": [
+        ["id": "ears", "name": "耳朵"],
+        ["id": "tail", "name": "尾巴"],
+        ["id": "earrings", "name": "耳飾"],
     ],
     "outfits": outfits.map {
         ["id": $0.id, "name": $0.name, "slot": $0.slot,
@@ -2726,21 +2779,20 @@ let manifest: [String: Any] = [
         ["id": $0.id, "name": $0.name, "slot": $0.slot, "power": 0, "dungeon": false, "behind": false,
          "origin": $0.origin, "colorFromHair": $0.colorFromHair] as [String: Any]
     },
-    // 畫在本體圖層之間的部位（尾巴、耳朵、耳飾），跟 slots 不同，不是疊在最上面
-    "bodySlots": [
-        ["id": "ears", "name": "耳朵"],
-        ["id": "tail", "name": "尾巴"],
-        ["id": "earrings", "name": "耳飾"],
-    ],
-    // 角色原本的樣子：部位 id → 物件 id（第一次開啟、或從舊版升級時穿上）
-    "defaultItems": Dictionary(uniqueKeysWithValues: bodyItems.filter { defaultItems.contains($0.id) }.map { ($0.slot, $0.id) }),
-    // 物件原本屬於哪個角色時，顯示用的角色名字
-    "characterNames": characterNames,
-    // 外觀（髮型 / 服裝）：純外觀、不加戰鬥力。第一個是預設。
+    // 外觀（髮型 / 服裝）：純外觀、不加戰鬥力。origin 是原本屬於哪個角色。
     "looks": [
-        "hair": hairStyles.map { ["id": $0.id, "name": $0.name] },
-        "clothes": clothesStyles.map { ["id": $0.id, "name": $0.name] },
+        "hair": hairStyles.map { ["id": $0.id, "name": $0.name, "origin": $0.origin as Any? ?? NSNull()] },
+        "clothes": clothesStyles.map { ["id": $0.id, "name": $0.name, "origin": $0.origin as Any? ?? NSNull()] },
     ],
+]
+try write(try JSONSerialization.data(withJSONObject: catalog, options: [.prettyPrinted, .sortedKeys]), "items.json")
+
+// manifest.json：這個角色的動作（幾格、多快）和 sprite sheet 的切法。名字和預設穿著在 character.json。
+let manifest: [String: Any] = [
+    "canvas": ["width": canvas, "height": canvas],
+    "actions": Dictionary(uniqueKeysWithValues: actions.map {
+        ($0.name, ["frames": $0.frames, "fps": $0.fps, "loop": $0.loop] as [String: Any])
+    }),
     "backFrames": backFrames,
     // 每一層的圖都是一張 sprite sheet（<層>.png）：每列 columns 格、每格 cell 像素，
     // 動作的第 i 格是整張圖的第 start[動作] + i 格（由左到右、由上到下數）

@@ -113,20 +113,19 @@ Xcode 會把這個 Swift Package 當專案打開，按左上角 ▶︎ 就能跑
 
 ## 換外觀 / 加衣服
 
-所有圖片都在 `Sources/SmallPet/Resources/`，每個角色一個資料夾，跟角色無關的圖層放在 `shared/`：
+所有圖片都在 `Sources/SmallPet/Resources/`。角色只剩「臉」和「預設穿什麼」，其他東西（髮型、衣服、服裝、兔耳之類的角色特徵）都放在 `shared/`，任何角色都能穿：
 
 ```
 Resources/
   characters/<角色>/
-    manifest.json                    角色名稱、動作格數、播放速度、部位、服裝清單、sprite sheet 的切法
+    character.json                   名字、選單順序、臉（眼睛 / 嘴巴的畫法和顏色）、預設穿什麼
     phrases.json                     這個角色的台詞
+    manifest.json                    動作格數、播放速度、sprite sheet 的切法（產生器輸出）
     face.png                         角色的臉（皮膚）
     features.png                     角色的五官：臉頰、眼睛、嘴巴
     outfits/vip_wings.png            跟角色輪廓有關的服裝
-    looks/hair/original/{behind,back,front}.png  角色原本的髮型
-    looks/clothes/original/{base,top}.png        角色原本的衣服
-    items/<物件id>/original.png       用原本髮色畫的兔耳、兔尾巴
   shared/                            所有角色共用一份（App 在角色資料夾找不到某一層時來這裡找）
+    items.json                       部位、服裝、角色特徵物件、髮型、衣服的清單
     outfits/<服裝id>.png              服裝疊圖
     looks/hair/<髮型id>/behind.png    外觀：垂在身後的頭髮
     looks/hair/<髮型id>/back.png      外觀：臉後面的頭髮（背對時是整顆後腦勺）
@@ -147,31 +146,47 @@ Resources/
 
 例如 `walk` 的第 2 格是第 4 + 2 = 6 格：第 0 列、第 6 欄。
 
-有 `looks/` 的話，App 用這十層（由下往上）疊出她本人：身後的頭髮、衣服、尾巴、耳朵、後腦頭髮、臉、前面的頭髮、耳環、五官、舉高的手。
-耳朵、尾巴、耳飾是可以穿脫的物件（manifest 的 `bodySlots`），原本屬於某個角色的物件在衣櫃顯示成「兔耳（阿米婭）」，任何角色都能戴；
-角色原本戴的（`defaultItems`）在第一次開啟或從舊版升級時自動穿上。所以產生器不再輸出 `body.png`；沒有的話（例如小貓素材）照舊用 `body`。
-哪些圖層放 `shared/` 由產生器的 `isShared` 決定：會挖掉她身體輪廓的服裝、`original` 髮型 / 衣服、含臉的 `head` 層都跟角色有關，其他共用。
-manifest 沒有 `sheet` 的舊素材，還是讀一格一張的 `body/<動作>_<格>.png`（支援 `.png` 和 `.pdf`）。
+App 用這十層（由下往上）疊出她本人：身後的頭髮、衣服、尾巴、耳朵、後腦頭髮、臉、前面的頭髮、耳環、五官、舉高的手。
+耳朵、尾巴、耳飾是可以穿脫的物件（`items.json` 的 `bodySlots`）。原本屬於某個角色的物件、髮型、衣服都標了 `origin`，
+衣櫃顯示成「兔耳（阿米婭）」「辮子短髮（理芽）」，任何角色都能穿。
+
+角色原本的樣子寫在 `character.json` 的 `defaults`：第一次開啟、或從舊版升級時自動穿上。
+衣櫃存檔有版本（`wardrobeVersion.<角色>`），舊存檔會一版一版轉換（見 `Wardrobe.migrate`）。
+
+舊素材（例如小貓）沒有 `items.json` 和外觀圖層時，清單照舊從 `manifest.json` 讀、本體用一張 `body.png`；
+manifest 沒有 `sheet` 的，讀一格一張的 `body/<動作>_<格>.png`（支援 `.png` 和 `.pdf`）。
 
 規則很簡單：
 
 - **每一格畫布一樣大**（目前 112×112 點，輸出 224×224 像素），角色腳底對齊同一個位置。
 - **服裝是透明背景的疊圖**，跟本體同動作、同格數，疊上去剛好穿在身上。
   某個動作沒畫衣服的話，會改用該服裝的 idle 圖。
-- 素材由 `swift Tools/generate-bunny.swift [amiya|rim]` 產生，它會自動拼好 sprite sheet。
+- 素材由 `swift Tools/generate-bunny.swift <角色>` 產生，它會自動拼好 sprite sheet。
 - `jump` 的 4 格有固定意義：0 蹲下、1 上升、2 下降、3 落地。
 
-**新增一件衣服**：在 `shared/outfits/` 放 `<新id>.png`，然後在 `manifest.json` 的 `outfits` 加一筆
-`{"id": "新id", "name": "顯示名稱", "slot": "head"}`（slot 可用 `head`、`face`、`neck`）。
+**新增一件衣服**：在 `shared/outfits/` 放 `<新id>.png`，然後在 `shared/items.json` 的 `outfits` 加一筆
+`{"id": "新id", "name": "顯示名稱", "slot": "head"}`（slot 可用 `head`、`face`、`neck`、`back`、`hand`）。
+重新產生素材會覆蓋 `items.json`，所以要長久保留的話，在 `generate-bunny.swift` 的 `outfits` 加一件。
 
 **新增一種髮型 / 衣服**：在 `Tools/generate-bunny.swift` 的「外觀」段落照著現有的寫一個 `HairStyle` 或 `ClothesStyle`，
 加進 `hairStyles` / `clothesStyles` 清單，再重新產生素材。髮型只畫頭和頭髮、衣服只畫身體，所以任何組合都對得上。
 
-**換掉整隻寵物**：直接用自己的圖覆蓋 `characters/<角色>/` 和 `shared/` 底下的圖層即可。
+**新增角色**：建 `characters/<id>/`，放一份 `phrases.json` 和 `character.json`：
 
-**新增角色**：在 `generate-bunny.swift` 的 `characterNames` 和 `Character.swift` 的 `Character.all` 各加一筆，畫出她的特徵（參考 `rim` 的寫法），再放一份 `phrases.json`。
+```json
+{
+  "id": "mika",
+  "name": "米卡",
+  "order": 2,
+  "face": { "eyes": "round", "eyeDark": "#3B2A12", "eyeIris": "#E07A2E", "mouth": "smile" },
+  "defaults": { "hair": "short_bob", "clothes": "sailor", "ears": "bunny_ears", "tail": null, "earrings": "diamond_earrings" }
+}
+```
 
-**重新產生素材**（會覆蓋該角色的 `outfits/`、`looks/`、`manifest.json`，以及共用的 `shared/`、`props/`；不會動到台詞）：
+`eyes` 可用 `round`、`rim`，`mouth` 可用 `omega`、`smile`（要新的畫法就在產生器的 `drawEye` / `drawHead` 加一個選項）。
+然後執行 `swift Tools/generate-bunny.swift mika`，只會多產生她的臉；App 會自動掃到 `character.json`，選單上就有她。
+
+**重新產生素材**（會覆蓋該角色的 `face`、`features`、`outfits/`、`manifest.json`，以及共用的 `shared/`、`props/`；不會動到 `character.json` 和台詞）：
 
 ```bash
 swift Tools/generate-bunny.swift        # 阿米婭

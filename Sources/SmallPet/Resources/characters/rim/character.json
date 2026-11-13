@@ -1,0 +1,18 @@
+{
+  "id": "rim",
+  "name": "理芽",
+  "order": 1,
+  "face": {
+    "eyes": "rim",
+    "eyeDark": "#1B2268",
+    "eyeIris": "#4C6BF0",
+    "mouth": "smile"
+  },
+  "defaults": {
+    "hair": "rim_hair",
+    "clothes": "rim_jacket",
+    "ears": null,
+    "tail": null,
+    "earrings": "diamond_earrings"
+  }
+}

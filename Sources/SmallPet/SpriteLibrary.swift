@@ -1,20 +1,21 @@
-// SpriteLibrary.swift —— 讀取目前角色的 manifest.json 與每一格圖片。
+// SpriteLibrary.swift —— 讀取目前角色的 manifest.json、共用的 items.json 與每一格圖片。
 //
 // 每一層的所有動作、所有格拼成一張 sprite sheet（<層>.png），manifest 的 sheet 記下怎麼切。
 // 資料夾結構（<角色> 見 Character.swift）：
-//   Resources/characters/<角色>/manifest.json            動作格數 / 速度、服裝清單、sheet 的切法
-//   Resources/characters/<角色>/body.png                  寵物本體（只有沒有 looks 的舊素材才用）
-//   Resources/characters/<角色>/outfits/<服裝id>.png      服裝疊圖（與本體同尺寸、同格數）
-//   Resources/characters/<角色>/looks/hair/<髮型id>/{behind,head}.png  外觀：髮型（有的話會取代 body）
-//   Resources/characters/<角色>/looks/clothes/<衣服id>/{base,top}.png  外觀：衣服
-//   Resources/shared/{outfits,looks}/…                   跟角色無關的圖層，所有角色共用一份；
-//                                                         角色資料夾裡找不到某一層時才來這裡找
+//   Resources/characters/<角色>/character.json           名字、臉、預設穿什麼
+//   Resources/characters/<角色>/manifest.json            動作格數 / 速度、sheet 的切法
+//   Resources/characters/<角色>/{face,features}.png      角色的臉、五官
+//   Resources/characters/<角色>/outfits/<服裝id>.png      跟角色輪廓有關的服裝
+//   Resources/shared/items.json                          部位、服裝、物件、髮型、衣服的清單（所有角色共用）
+//   Resources/shared/{outfits,looks,items}/…             共用的圖層；角色資料夾裡找不到某一層時來這裡找
 //   Resources/props/<名字>.png                           家具等道具（所有角色共用）
+//
+// 舊素材：清單直接寫在 manifest.json（沒有 items.json）、只有一張 body.png（沒有 looks）。
 //
 // manifest 沒有 sheet 的舊素材，還是讀一格一張的 <層>/<動作>_<格>.png（或 .pdf）。
 import AppKit
 
-struct Manifest: Decodable {
+struct Manifest {
     struct Canvas: Decodable {
         let width: Double
         let height: Double
@@ -39,33 +40,80 @@ struct Manifest: Decodable {
         let origin: String?   // 原本屬於哪個角色（兔耳是阿米婭的），衣櫃顯示成「兔耳（阿米婭）」
         let colorFromHair: Bool?      // 用髮色畫：每種髮型各一張圖 items/<id>/<髮型id>.png
     }
-    // 純外觀的髮型 / 衣服（不加戰鬥力）。第一個是預設。
+    // 純外觀的髮型 / 衣服（不加戰鬥力）。預設穿哪個看 character.json，沒寫就是第一個。
     struct LookOption: Decodable, Identifiable {
         let id: String
         let name: String
+        let origin: String?   // 原本屬於哪個角色，衣櫃顯示成「短髮（阿米婭）」
     }
     struct Looks: Decodable {
         let hair: [LookOption]
         let clothes: [LookOption]
     }
 
-    let canvas: Canvas
-    let actions: [String: ActionInfo]
-    let slots: [Slot]       // 由下往上疊的順序
-    let outfits: [Outfit]
-    let looks: Looks?               // 舊素材（例如小貓）沒有外觀圖層
-    let backFrames: [String: [Int]]?  // 背對畫面的格（動作名 → 第幾格）
+    var canvas: Canvas
+    var actions: [String: ActionInfo]
+    var slots: [Slot]       // 由下往上疊的順序
+    var outfits: [Outfit]
+    var looks: Looks?               // 舊素材（例如小貓）沒有外觀圖層
+    var backFrames: [String: [Int]]?  // 背對畫面的格（動作名 → 第幾格）
     // sprite sheet 的切法：每列 columns 格、每格 cell 像素；動作的第 i 格是第 start[動作] + i 格（由左到右、由上到下）
     struct Sheet: Decodable {
         let columns: Int
         let cell: Int
         let start: [String: Int]
     }
-    let sheet: Sheet?
+    var sheet: Sheet?
     // 畫在本體圖層之間的部位（耳朵、尾巴、耳飾），物件一樣放在 outfits 裡
-    let bodySlots: [Slot]?
-    let defaultItems: [String: String]?     // 角色原本的樣子：部位 id → 物件 id
-    let characterNames: [String: String]?   // 角色 id → 名字（顯示物件來源用）
+    var bodySlots: [Slot]?
+    var defaultItems: [String: String]?     // 角色原本的樣子：部位 id → 物件 id
+    var defaultLook: Look?                  // 角色原本的髮型 / 衣服
+    var characterNames: [String: String]?   // 角色 id → 名字（顯示物件來源用）
+
+    // 角色的 manifest.json。舊素材把服裝清單也寫在這裡；新素材的清單在 shared/items.json。
+    private struct File: Decodable {
+        let canvas: Canvas
+        let actions: [String: ActionInfo]
+        let backFrames: [String: [Int]]?
+        let sheet: Sheet?
+        let slots: [Slot]?
+        let outfits: [Outfit]?
+        let looks: Looks?
+        let bodySlots: [Slot]?
+        let defaultItems: [String: String]?
+        let characterNames: [String: String]?
+    }
+    // shared/items.json
+    private struct Catalog: Decodable {
+        let slots: [Slot]
+        let bodySlots: [Slot]?
+        let outfits: [Outfit]
+        let looks: Looks?
+    }
+
+    // 讀角色的 manifest.json，再補上 shared/items.json 的清單和 character.json 的預設穿著。
+    static func load(character root: URL, shared: URL, info: CharacterInfo?) throws -> Manifest {
+        let file = try JSONDecoder().decode(File.self, from: Data(contentsOf: root.appendingPathComponent("manifest.json")))
+        let catalog = try? JSONDecoder().decode(Catalog.self, from: Data(contentsOf: shared.appendingPathComponent("items.json")))
+        var m = Manifest(canvas: file.canvas, actions: file.actions,
+                         slots: catalog?.slots ?? file.slots ?? [], outfits: catalog?.outfits ?? file.outfits ?? [],
+                         looks: catalog?.looks ?? file.looks, backFrames: file.backFrames, sheet: file.sheet,
+                         bodySlots: catalog?.bodySlots ?? file.bodySlots, defaultItems: file.defaultItems,
+                         defaultLook: nil, characterNames: file.characterNames)
+        if let defaults = info?.defaults {
+            let bodySlotIDs = Set((m.bodySlots ?? []).map(\.id))
+            m.defaultItems = defaults.filter { bodySlotIDs.contains($0.key) }.compactMapValues { $0 }
+            if let looks = m.looks {
+                let hair = defaults["hair"].flatMap { $0 }.flatMap { id in looks.hair.first { $0.id == id } } ?? looks.hair.first
+                let clothes = defaults["clothes"].flatMap { $0 }.flatMap { id in looks.clothes.first { $0.id == id } } ?? looks.clothes.first
+                if let hair, let clothes { m.defaultLook = Look(hair: hair.id, clothes: clothes.id) }
+            }
+        }
+        if m.characterNames == nil {
+            m.characterNames = Dictionary(uniqueKeysWithValues: Character.all.map { ($0.id, $0.name) })
+        }
+        return m
+    }
 }
 
 // 目前選的外觀：髮型 id + 衣服 id。
@@ -91,8 +139,8 @@ final class SpriteLibrary {
         self.shared = shared
         root = shared.appendingPathComponent("characters/\(Character.current)")
         do {
-            let data = try Data(contentsOf: root.appendingPathComponent("manifest.json"))
-            manifest = try JSONDecoder().decode(Manifest.self, from: data)
+            manifest = try Manifest.load(character: root, shared: shared.appendingPathComponent("shared"),
+                                         info: Character.info(Character.current))
         } catch {
             fatalError("manifest.json 讀取失敗：\(error)")
         }
@@ -155,16 +203,19 @@ final class SpriteLibrary {
         return lookFrame(colorFromHair ? "items/\(id)/\(look.hair)" : "items/\(id)", action, frame)
     }
 
-    // 衣櫃顯示的名字：原本屬於某個角色的物件加上「（角色名）」。
-    func displayName(_ outfit: Manifest.Outfit) -> String {
-        guard let origin = outfit.origin else { return outfit.name }
-        let owner = manifest.characterNames?[origin] ?? Character.all.first { $0.id == origin }?.name ?? origin
-        return "\(outfit.name)（\(owner)）"
+    // 衣櫃顯示的名字：原本屬於某個角色的物件 / 髮型 / 衣服加上「（角色名）」。
+    func displayName(_ outfit: Manifest.Outfit) -> String { displayName(outfit.name, origin: outfit.origin) }
+    func displayName(_ option: Manifest.LookOption) -> String { displayName(option.name, origin: option.origin) }
+
+    private func displayName(_ name: String, origin: String?) -> String {
+        guard let origin else { return name }
+        return "\(name)（\(manifest.characterNames?[origin] ?? origin)）"
     }
 
-    // 預設外觀（manifest 裡各自的第一個）。
+    // 預設外觀（character.json 的 defaults，沒寫就是清單裡各自的第一個）。
     var defaultLook: Look {
-        Look(hair: manifest.looks?.hair.first?.id ?? "", clothes: manifest.looks?.clothes.first?.id ?? "")
+        manifest.defaultLook
+            ?? Look(hair: manifest.looks?.hair.first?.id ?? "", clothes: manifest.looks?.clothes.first?.id ?? "")
     }
 
     // 這一格是不是背對畫面。

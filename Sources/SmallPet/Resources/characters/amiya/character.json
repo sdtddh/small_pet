@@ -1,0 +1,18 @@
+{
+  "id": "amiya",
+  "name": "阿米婭",
+  "order": 0,
+  "face": {
+    "eyes": "round",
+    "eyeDark": "#1F3F66",
+    "eyeIris": "#46C1DE",
+    "mouth": "omega"
+  },
+  "defaults": {
+    "hair": "amiya_hair",
+    "clothes": "amiya_jacket",
+    "ears": "bunny_ears",
+    "tail": "bunny_tail",
+    "earrings": null
+  }
+}

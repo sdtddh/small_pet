@@ -14,7 +14,7 @@ final class Wardrobe: ObservableObject {
     // 衣櫃存檔的版本。沒有這個 key = 第 1 版（1.3.0 以前）。
     // 改了存檔內容要轉換時：把 currentVersion 加 1，在 migrate 裡加一段「從上一版升到這一版」。
     private static let versionKey = "wardrobeVersion.\(Character.current)"
-    private static let currentVersion = 2
+    private static let currentVersion = 3
 
     // 部位 id → 服裝 id。
     @Published private(set) var equipped: [String: String]
@@ -36,7 +36,7 @@ final class Wardrobe: ObservableObject {
         // 也過濾掉還沒從地下城拿到的服裝。
         let valid = Set(sprites.manifest.outfits.filter { $0.dungeon != true || stats.owns($0.id) }.map(\.id))
         var equipped = saved.filter { valid.contains($0.value) }
-        Self.migrate(&equipped, manifest: sprites.manifest, valid: valid)
+        Self.migrate(&equipped, manifest: sprites.manifest, valid: valid, defaultLook: sprites.defaultLook)
         self.equipped = equipped
 
         var look = sprites.defaultLook
@@ -47,7 +47,7 @@ final class Wardrobe: ObservableObject {
     }
 
     // 把舊版存檔一版一版升到 currentVersion，升完存回去。
-    private static func migrate(_ equipped: inout [String: String], manifest: Manifest, valid: Set<String>) {
+    private static func migrate(_ equipped: inout [String: String], manifest: Manifest, valid: Set<String>, defaultLook: Look) {
         let d = UserDefaults.standard
         var version = max(d.integer(forKey: versionKey), 1)   // 沒存過是 0，當作第 1 版
         guard version < currentVersion else { return }
@@ -58,6 +58,16 @@ final class Wardrobe: ObservableObject {
                 equipped[slot] = id
             }
             version = 2
+        }
+        if version == 2 {
+            // 第 3 版：角色原本的髮型 / 衣服從 "original" 改成有名字的共用外觀（amiya_hair、rim_jacket…），
+            // 任何角色都能穿。存檔裡的 "original" 換成這個角色預設的那一套（character.json 的 defaults）。
+            if var saved = d.dictionary(forKey: lookKey) as? [String: String] {
+                if saved["hair"] == "original" { saved["hair"] = defaultLook.hair }
+                if saved["clothes"] == "original" { saved["clothes"] = defaultLook.clothes }
+                d.set(saved, forKey: lookKey)
+            }
+            version = 3
         }
         d.set(equipped, forKey: defaultsKey)
         d.set(version, forKey: versionKey)
@@ -171,7 +181,7 @@ struct WardrobeView: View {
             optionGrid {
                 ForEach(options) { option in
                     Button { choose(option.id) } label: {
-                        card(name: option.name, selected: option.id == selected) {
+                        card(name: sprites.displayName(option), selected: option.id == selected) {
                             PetPreview(sprites: sprites, outfits: wardrobe.equipped, look: preview(option.id))
                         }
                     }
