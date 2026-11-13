@@ -128,6 +128,8 @@ struct Pose {
     var tail: CGFloat = 0           // 背面時兔尾巴的左右擺動
     var straps = false              // 抓著降落傘的繩子（繩子一路畫到畫布頂端）
     var parasol = false             // 撐著雨傘飄下來（拿雨傘時代替降落傘；傘柄一路畫到畫布頂端）
+    var armBackReach: CGFloat = 0   // 近的那隻手（畫面左邊）多伸長多少：打電腦時要伸過身體前面碰到鍵盤
+    var armFrontReach: CGFloat = 0  // 遠的那隻手多伸長多少
     var carrot = false              // 前手拿著胡蘿蔔，尖端朝嘴巴（吃東西用）
     var sword = false               // 前手握著劍（地下城打 boss 用）
     var slash: CGFloat = 0          // 揮劍的刀光：0 沒有，越大越亮
@@ -315,12 +317,12 @@ func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
         // 她面向右邊、身體斜四分之三：畫面左邊那隻手（shoulderBack）是靠近我們的手，要擋在衣服前面；
         // 畫面右邊、臉那一側的手（shoulderFront，拿東西、打字、揮劍用的）是遠的那隻，從身體後面伸出來。
         drawLeg(ctx, from: hipBack.applying(ut), to: CGPoint(x: footBack.x + p.backFoot.x, y: footBack.y + p.backFoot.y))
-        if !raised(p.armFront) { withState(ctx, upper(p)) { drawArm(ctx, shoulderFront, p.armFront) } }
+        if !raised(p.armFront) { withState(ctx, upper(p)) { drawArm(ctx, shoulderFront, p.armFront, reach: p.armFrontReach) } }
         drawLeg(ctx, from: hipFront.applying(ut), to: CGPoint(x: footFront.x + p.frontFoot.x, y: footFront.y + p.frontFoot.y))
 
         withState(ctx, upper(p)) {
             look.clothes.torso(ctx, p)
-            if !raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
+            if !raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack, reach: p.armBackReach) }
         }
     }
 
@@ -328,12 +330,12 @@ func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
 
     if parts.contains(.top) {
         // 胡蘿蔔在臉前面、手的後面，看起來像握在手裡
-        if p.carrot { withState(ctx, upper(p)) { drawCarrot(ctx, at: hand(shoulderFront, p.armFront)) } }
+        if p.carrot { withState(ctx, upper(p)) { drawCarrot(ctx, at: hand(shoulderFront, p.armFront, reach: p.armFrontReach)) } }
 
-        // 舉高的手要畫在頭前面，不然會被大頭擋住
+        // 舉高的手要畫在頭前面，不然會被大頭擋住。近的手（shoulderBack）後畫，兩隻手交疊時（打電腦）蓋在遠的手上面
         withState(ctx, upper(p)) {
-            if raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
-            if raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
+            if raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront, reach: p.armFrontReach) }
+            if raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack, reach: p.armBackReach) }
         }
 
         // 劍（和刀光）永遠在最前面，看起來握在手裡
@@ -358,8 +360,8 @@ func drawBodyBack(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
 
         withState(ctx, upper(p)) {
             // 背面看得到垂下的手臂在身體兩側
-            if !raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
-            if !raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
+            if !raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack, reach: p.armBackReach) }
+            if !raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront, reach: p.armFrontReach) }
             look.clothes.torsoBack(ctx, p)
         }
     }
@@ -390,8 +392,8 @@ func drawBodyBack(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
 
     if parts.contains(.top) {
         withState(ctx, upper(p)) {
-            if raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack) }
-            if raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront) }
+            if raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack, reach: p.armBackReach) }
+            if raised(p.armFront) { drawArm(ctx, shoulderFront, p.armFront, reach: p.armFrontReach) }
         }
     }
 }
@@ -445,24 +447,25 @@ func drawLeg(_ ctx: CGContext, from hip: CGPoint, to foot: CGPoint) {
 func raised(_ angle: CGFloat) -> Bool { abs(angle) > 1.3 }
 
 // 手（白色圓手的中心）在上半身座標裡的位置。
-func hand(_ s: CGPoint, _ angle: CGFloat) -> CGPoint {
-    CGPoint(x: s.x + sin(angle) * 12.5, y: s.y - cos(angle) * 12.5)
+// reach：手臂多伸長幾個單位（斜四分之三的身體，近的手要伸過身體前面才碰得到前方的東西）。
+func hand(_ s: CGPoint, _ angle: CGFloat, reach: CGFloat = 0) -> CGPoint {
+    CGPoint(x: s.x + sin(angle) * (12.5 + reach), y: s.y - cos(angle) * (12.5 + reach))
 }
 
 // 手臂：袖子 + 袖口 + 白色圓手（顏色、袖子粗細看目前的服裝）。角度 0 垂下，往前轉為正。
-func drawArm(_ ctx: CGContext, _ s: CGPoint, _ angle: CGFloat) {
+func drawArm(_ ctx: CGContext, _ s: CGPoint, _ angle: CGFloat, reach r: CGFloat = 0) {
     let c = look.clothes
     let w = c.sleeveWidth
     let d = CGPoint(x: sin(angle), y: -cos(angle))
     func at(_ k: CGFloat) -> CGPoint { CGPoint(x: s.x + d.x * k, y: s.y + d.y * k) }
     ctx.setLineCap(.round)
-    line(ctx, segment(s, at(9)), outline, width: w + 2.4)
-    line(ctx, segment(s, at(9)), c.sleeve, width: w)
+    line(ctx, segment(s, at(9 + r)), outline, width: w + 2.4)
+    line(ctx, segment(s, at(9 + r)), c.sleeve, width: w)
     ctx.setLineCap(.butt)
-    line(ctx, segment(at(8), at(10)), outline, width: w + 2.4)
-    line(ctx, segment(at(8.4), at(9.6)), c.cuff, width: w)
+    line(ctx, segment(at(8 + r), at(10 + r)), outline, width: w + 2.4)
+    line(ctx, segment(at(8.4 + r), at(9.6 + r)), c.cuff, width: w)
     ctx.setLineCap(.round)
-    let h = hand(s, angle)
+    let h = hand(s, angle, reach: r)
     shape(ctx, ellipse(h.x, h.y, 7.5, 7.5), white, lineWidth: 1.8)
 }
 
@@ -597,11 +600,23 @@ func drawEye(_ ctx: CGContext, _ c: CGPoint, _ eyes: Eyes) {
         ctx.restoreGState()
         shape(ctx, ellipse(c.x - 1.4, c.y + 2.4, 3.4, 3.4), white, stroke: false)
         shape(ctx, ellipse(c.x + 1.8, c.y - 2.6, 1.6, 1.6), white, stroke: false)
-        // 上睫毛
+        // 上睫毛：原本那條弧線（粗 2，靠鼻子那端不動）……
         let lash = CGMutablePath()
         lash.move(to: CGPoint(x: c.x - 5, y: c.y + 4))
         lash.addQuadCurve(to: CGPoint(x: c.x + 5, y: c.y + 4), control: CGPoint(x: c.x, y: c.y + 7.5))
         line(ctx, lash, outline, width: 2)
+        // ……再從靠耳朵那端接一段往下收、越來越細的尾巴。鼻子在兩眼中間，s 是耳朵那一側（+1 右、-1 左）
+        let s: CGFloat = c.x > (eyeBack.x + eyeFront.x) / 2 ? 1 : -1
+        let start = CGPoint(x: c.x + 5 * s, y: c.y + 4)
+        let tip = CGPoint(x: c.x + 8.6 * s, y: c.y + 1.2)
+        let n = CGPoint(x: 0.57 * s, y: 0.82)          // 弧線末端的法線（往上、往外）
+        let mid = CGPoint(x: (start.x + tip.x) / 2, y: (start.y + tip.y) / 2)
+        let tail = CGMutablePath()
+        tail.move(to: CGPoint(x: start.x + n.x, y: start.y + n.y))
+        tail.addQuadCurve(to: tip, control: CGPoint(x: mid.x + n.x * 0.9, y: mid.y + n.y * 0.9))
+        tail.addQuadCurve(to: CGPoint(x: start.x - n.x, y: start.y - n.y), control: CGPoint(x: mid.x - n.x * 0.2, y: mid.y - n.y * 0.2))
+        tail.closeSubpath()
+        shape(ctx, tail, outline, stroke: false)
     case .wide:
         shape(ctx, ellipse(c.x, c.y, 10, 12), white, lineWidth: 1.6)
         shape(ctx, ellipse(c.x + 0.5, c.y, 4, 5), eyeIris, stroke: false)
@@ -1188,7 +1203,7 @@ let outfits: [Outfit] = [
     Outfit(id: "balloon", name: "氣球", slot: "hand") { ctx, p in
         guard !p.carrot else { return }
         withState(ctx, upper(p)) {
-            let h = hand(shoulderFront, p.armFront)
+            let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
             // 氣球一直飄在頭的右上方，線從手拉上去
             let b = CGPoint(x: 85, y: 87)
             let string = CGMutablePath()
@@ -1205,7 +1220,7 @@ let outfits: [Outfit] = [
     Outfit(id: "lollipop", name: "棒棒糖", slot: "hand") { ctx, p in
         guard !p.carrot else { return }
         withState(ctx, upper(p)) {
-            let h = hand(shoulderFront, p.armFront)
+            let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
             let top = CGPoint(x: h.x + 2, y: h.y + 13)
             line(ctx, segment(h, top), outline, width: 3.2)
             line(ctx, segment(h, top), white, width: 1.8)
@@ -1229,7 +1244,7 @@ let outfits: [Outfit] = [
         guard !p.carrot else { return }
         if p.parasol {
             // 傘柄從手直直往上，在 x = parasolX 跟道具圖的傘柄接起來（App 會讓道具圖跟著她轉向翻面）
-            let h = hand(shoulderFront, p.armFront).applying(upperTransform(p))
+            let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach).applying(upperTransform(p))
             let top = pt(parasolX, canvas + 2)
             line(ctx, segment(h, top), outline, width: 2.6)
             line(ctx, segment(h, top), umbrellaShaft, width: 1.2)
@@ -1241,7 +1256,7 @@ let outfits: [Outfit] = [
             return
         }
         withState(ctx, upper(p)) {
-            let h = hand(shoulderFront, p.armFront)
+            let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
             let a = p.armFront + 0.6                             // 順著手臂再往前斜一點，傘尖才不會插進腳裡
             let d = pt(sin(a), -cos(a))
             func at(_ k: CGFloat, side: CGFloat = 0) -> CGPoint { pt(h.x + d.x * k - d.y * side, h.y + d.y * k + d.x * side) }
@@ -2186,9 +2201,12 @@ func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
         // 坐在電腦桌前的小凳子上打字：前手在鍵盤上一上一下，眼睛盯著螢幕，偶爾眨眼
         p.frontFoot = CGPoint(x: 8, y: 4)
         p.backFoot = CGPoint(x: 5, y: 5)
-        p.lean = 0.04
-        p.armBack = 0.9
-        p.armFront = i % 2 == 0 ? 1.72 : 1.88
+        p.lean = 0.06
+        // 兩隻手輪流敲鍵盤抽屜上的鍵盤：遠的手（臉那一側）在右半，近的手伸長、橫過身體前面放在左半
+        p.armFront = i % 2 == 0 ? 1.40 : 1.48
+        p.armFrontReach = 9
+        p.armBack = i % 2 == 0 ? 1.42 : 1.34
+        p.armBackReach = 19
         p.headTilt = 0.03
         p.ears = 0.06 * CGFloat(i % 2)
         if i == 3 { p.eyes = .closed }
@@ -2441,10 +2459,14 @@ func drawComputer(_ ctx: CGContext, on: Bool) {
     for x in [CGFloat(78), CGFloat(134)] {
         shape(ctx, rounded(x, ground, 4.5, 27, 1.5), woodDark, lineWidth: 1.6)
     }
-    shape(ctx, rounded(72, 30, 70, 5, 2), wood, lineWidth: 1.8)
+    // 鍵盤抽屜：從桌面底下拉出來的托板，比桌面低、往她那邊伸，她的手不用伸太長就放得到鍵盤上
+    for x in [CGFloat(83), CGFloat(90)] {
+        shape(ctx, rounded(x, 23, 2.5, 7.5, 0.8), woodDark, lineWidth: 1.2)   // 掛在桌面下的滑軌
+    }
+    shape(ctx, rounded(60, 21, 34, 3, 1.2), wood, lineWidth: 1.6)
+    shape(ctx, rounded(63, 24, 20, 2.6, 1), hex(0xE8E8EE), lineWidth: 1.3)   // 鍵盤（她的手放在上面）
 
-    // 鍵盤（她的手放在上面）
-    shape(ctx, rounded(70, 35, 19, 3, 1), hex(0xE8E8EE), lineWidth: 1.4)
+    shape(ctx, rounded(72, 30, 70, 5, 2), wood, lineWidth: 1.8)
 
     // 桌上的馬克杯（在螢幕後面）
     shape(ctx, rounded(130, 35, 7, 8, 1.5), hex(0xF7C66B), lineWidth: 1.4)
@@ -2626,7 +2648,7 @@ func drawPlane(_ ctx: CGContext, _ part: PlanePart) {
 func swordAngle(_ armAngle: CGFloat) -> CGFloat { armAngle + 0.5 }
 
 func drawSword(_ ctx: CGContext, _ p: Pose) {
-    let h = hand(shoulderFront, p.armFront)
+    let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
     // 刀光：從舉劍的角度劃到現在的角度，一道彎彎的光
     if p.slash > 0 {
         let s = shoulderFront
@@ -3127,7 +3149,7 @@ func anchorTransform(_ anchor: String, _ p: Pose) -> CGAffineTransform? {
     case "upper": return upperTransform(p)
     case "hand":
         if p.carrot { return nil }
-        let h = hand(shoulderFront, p.armFront), h0 = hand(shoulderFront, restPose.armFront)
+        let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach), h0 = hand(shoulderFront, restPose.armFront)
         return CGAffineTransform(translationX: h.x - h0.x, y: h.y - h0.y).concatenating(upperTransform(p))
     default: return nil
     }
