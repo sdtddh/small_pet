@@ -210,6 +210,16 @@ func upperTransform(_ p: Pose) -> CGAffineTransform {
         .translatedBy(x: -pivot.x, y: -pivot.y)
 }
 
+// 頭的座標變換（跟 head(p) 做的事一樣，只是回傳矩陣）：頭的位移與點頭，再套上半身。
+func headTransform(_ p: Pose) -> CGAffineTransform {
+    CGAffineTransform.identity
+        .translatedBy(x: p.headDX, y: p.headDY)
+        .translatedBy(x: neck.x, y: neck.y)
+        .rotated(by: -p.headTilt)
+        .translatedBy(x: -neck.x, y: -neck.y)
+        .concatenating(upperTransform(p))
+}
+
 func upper(_ p: Pose) -> (CGContext) -> Void {
     { ctx in ctx.concatenate(upperTransform(p)) }
 }
@@ -2595,7 +2605,7 @@ func isShared(_ relative: String) -> Bool {
     switch parts.first {
     case "outfits":
         return parts.count > 1 && !characterOutfits.contains(parts[1].replacingOccurrences(of: ".png", with: ""))
-    case "looks", "items", "items.json":
+    case "looks", "items", "items.json", "anchors.json":
         return true
     default:
         return false
@@ -2679,6 +2689,76 @@ func writeSheets() throws {
 let previewFrames: Set<String>? = ProcessInfo.processInfo.environment["LOOK_PREVIEW"]
     .map { Set($0.split(separator: ",").map(String.init)) }
 
+// MARK: 錨點：只畫一次的服裝
+//
+// 帽子、眼鏡這類服裝的形狀從來不變，每一格不同的只有它跟著頭（或上半身、手）移動、傾斜、壓扁的那個 2D 矩陣。
+// 所以這些服裝只用「靜止姿勢」畫一張正面、一張背面（outfits/<id>/front.png、back.png），
+// 每一格的矩陣寫進 shared/anchors.json，App 顯示時把矩陣套到圖層上。
+//   head   頭（帽子、眼鏡、耳機…）
+//   upper  上半身（圍巾、領結、披風、書包…）
+//   hand   前手的位置（只有位移；手上拿著胡蘿蔔時是 null，手上的東西要收起來）
+// 矩陣是 [a, b, c, d, tx, ty]（跟 CGAffineTransform 一樣），單位是畫布的點（112×112），原點在畫布左下角。
+let outfitAnchors: [String: String] = [
+    "cap": "head", "party_hat": "head", "glasses": "head", "sunglasses": "head", "straw_hat": "head",
+    "witch_hat": "head", "crown": "head", "ribbon": "head", "flower_crown": "head", "headphones": "head",
+    "goggles": "head", "heart_glasses": "head",
+    "scarf": "upper", "bowtie": "upper", "cape": "upper", "bell_collar": "upper", "backpack": "upper",
+    "lollipop": "hand",
+]
+// 氣球的線從手拉到固定的氣球、雨傘跟著手臂角度轉、翅膀會張開 / 拍動、要挖掉身體，這些還是逐格畫。
+
+let restPose = Pose()   // 靜止姿勢：上半身、頭的矩陣都是單位矩陣
+
+func anchorTransform(_ anchor: String, _ p: Pose) -> CGAffineTransform? {
+    switch anchor {
+    case "head": return headTransform(p)
+    case "upper": return upperTransform(p)
+    case "hand":
+        if p.carrot { return nil }
+        let h = hand(shoulderFront, p.armFront), h0 = hand(shoulderFront, restPose.armFront)
+        return CGAffineTransform(translationX: h.x - h0.x, y: h.y - h0.y).concatenating(upperTransform(p))
+    default: return nil
+    }
+}
+
+// 換成畫布座標（產生器畫圖時整張往右移了 offsetX）。
+func canvasMatrix(_ t: CGAffineTransform) -> [Double] {
+    let m = CGAffineTransform(translationX: -offsetX, y: 0).concatenating(t).concatenating(CGAffineTransform(translationX: offsetX, y: 0))
+    return [m.a, m.b, m.c, m.d, m.tx, m.ty].map { (Double($0) * 10000).rounded() / 10000 }
+}
+
+// 整張透明（例如眼鏡背對時不畫）就不輸出。
+func isEmptyPNG(_ data: Data) -> Bool {
+    guard let image = decodeImage(data),
+          let ctx = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                              space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    else { return false }
+    ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    let px = ctx.data!.assumingMemoryBound(to: UInt8.self)
+    return !stride(from: 3, to: image.width * image.height * 4, by: 4).contains { px[$0] != 0 }
+}
+
+if previewFrames == nil {
+    for outfit in outfits {
+        guard outfitAnchors[outfit.id] != nil else { continue }
+        for (name, back) in [("front", false), ("back", true)] {
+            var p = restPose
+            p.back = back
+            let png = renderPNG { outfit.draw($0, p) }
+            if !isEmptyPNG(png) { try write(png, "outfits/\(outfit.id)/\(name).png") }
+        }
+    }
+    var anchorTable: [String: [String: [Any]]] = [:]
+    for anchor in Set(outfitAnchors.values) {
+        for spec in actions {
+            anchorTable[anchor, default: [:]][spec.name] = (0..<spec.frames).map { i -> Any in
+                anchorTransform(anchor, pose(spec.name, i, spec.frames)).map(canvasMatrix) ?? NSNull()
+            }
+        }
+    }
+    try write(try JSONSerialization.data(withJSONObject: anchorTable, options: [.sortedKeys]), "anchors.json")
+}
+
 var count = 0
 for spec in actions where previewFrames == nil {
     for i in 0..<spec.frames {
@@ -2686,7 +2766,7 @@ for spec in actions where previewFrames == nil {
         p.frame = i
         p.frameCount = spec.frames
         // 完整的本體（body.png）不再輸出：App 用的是下面的髮型 / 衣服圖層
-        for outfit in outfits {
+        for outfit in outfits where outfitAnchors[outfit.id] == nil {
             addFrame(renderPNG { outfit.draw($0, p) }, "outfits/\(outfit.id)", spec.name, i)
             count += 1
         }
@@ -2774,7 +2854,8 @@ let catalog: [String: Any] = [
     "outfits": outfits.map {
         ["id": $0.id, "name": $0.name, "slot": $0.slot,
          "power": outfitPower[$0.id] ?? 0, "dungeon": dungeonOutfits.contains($0.id),
-         "behind": behindOutfits.contains($0.id), "behindActions": behindActions[$0.id] ?? []] as [String: Any]
+         "behind": behindOutfits.contains($0.id), "behindActions": behindActions[$0.id] ?? [],
+         "anchor": outfitAnchors[$0.id] as Any? ?? NSNull()] as [String: Any]
     } + bodyItems.map {
         ["id": $0.id, "name": $0.name, "slot": $0.slot, "power": 0, "dungeon": false, "behind": false,
          "origin": $0.origin, "colorFromHair": $0.colorFromHair] as [String: Any]

@@ -8,6 +8,7 @@
 //   Resources/characters/<角色>/outfits/<服裝id>.png      跟角色輪廓有關的服裝
 //   Resources/shared/items.json                          部位、服裝、物件、髮型、衣服的清單（所有角色共用）
 //   Resources/shared/{outfits,looks,items}/…             共用的圖層；角色資料夾裡找不到某一層時來這裡找
+//   Resources/shared/anchors.json                        每一格的錨點矩陣（帽子、眼鏡這類只畫一張的服裝用）
 //   Resources/props/<名字>.png                           家具等道具（所有角色共用）
 //
 // 舊素材：清單直接寫在 manifest.json（沒有 items.json）、只有一張 body.png（沒有 looks）。
@@ -39,6 +40,9 @@ struct Manifest {
         let behindActions: [String]?  // 這些動作時也疊在本體下面（撐傘飄下來時的傘柄）
         let origin: String?   // 原本屬於哪個角色（兔耳是阿米婭的），衣櫃顯示成「兔耳（阿米婭）」
         let colorFromHair: Bool?      // 用髮色畫：每種髮型各一張圖 items/<id>/<髮型id>.png
+        // 錨點：只畫一張圖（outfits/<id>/front.png、back.png），每一格依 anchors.json 的矩陣跟著頭 / 上半身 / 手移動。
+        // nil 表示逐格畫好的 sprite sheet（outfits/<id>.png）。
+        let anchor: String?
     }
     // 純外觀的髮型 / 衣服（不加戰鬥力）。預設穿哪個看 character.json，沒寫就是第一個。
     struct LookOption: Decodable, Identifiable {
@@ -239,6 +243,58 @@ final class SpriteLibrary {
     func outfitFrame(_ outfitID: String, _ action: PetAction, _ frame: Int) -> NSImage? {
         image(in: "outfits/\(outfitID)", action: action, frame: frame)
             ?? image(in: "outfits/\(outfitID)", action: .idle, frame: frame)
+    }
+
+    // MARK: 錨點服裝
+
+    // anchors.json：錨點 → 動作 → 每一格的 [a, b, c, d, tx, ty]（null = 這一格不顯示，例如手上拿著胡蘿蔔）。
+    // 單位是畫布的點，原點在畫布左下角。
+    private lazy var anchors: [String: [String: [[Double]?]]] = {
+        let url = shared.appendingPathComponent("shared/anchors.json")
+        return (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode([String: [String: [[Double]?]]].self, from: $0) } ?? [:]
+    }()
+
+    func outfit(_ id: String) -> Manifest.Outfit? {
+        manifest.outfits.first { $0.id == id }
+    }
+
+    // 某個錨點在這一格的矩陣（畫布的點）。動作沒有資料就用 idle 的；nil 表示這一格不顯示。
+    func anchorTransform(_ anchor: String, _ action: PetAction, _ frame: Int) -> CGAffineTransform? {
+        guard let table = anchors[anchor], let frames = table[action.rawValue] ?? table[PetAction.idle.rawValue],
+              !frames.isEmpty, let m = frames[frame % frames.count], m.count == 6 else { return nil }
+        return CGAffineTransform(a: m[0], b: m[1], c: m[2], d: m[3], tx: m[4], ty: m[5])
+    }
+
+    // 錨點服裝的那一張圖：正面或背面（沒有這張 = 這個方向看不到，例如眼鏡背對時）。
+    private var anchoredImages: [String: NSImage?] = [:]
+    func anchoredImage(_ id: String, back: Bool) -> NSImage? {
+        let key = "outfits/\(id)/\(back ? "back" : "front")"
+        if let cached = anchoredImages[key] { return cached }
+        let image = [root, shared.appendingPathComponent("shared")].lazy
+            .compactMap { NSImage(contentsOf: $0.appendingPathComponent("\(key).png")) }
+            .first
+        image?.size = canvasSize
+        anchoredImages[key] = .some(image)
+        return image
+    }
+
+    // 錨點服裝這一格的圖和矩陣；nil 表示這一格看不到。
+    func anchored(_ outfit: Manifest.Outfit, _ action: PetAction, _ frame: Int) -> (image: NSImage, transform: CGAffineTransform)? {
+        guard let anchor = outfit.anchor, let t = anchorTransform(anchor, action, frame),
+              let image = anchoredImage(outfit.id, back: isBackView(action, frame)) else { return nil }
+        return (image, t)
+    }
+
+    // 服裝這一格畫成一張跟畫布一樣大的圖（衣櫃預覽用；寵物本身是直接把矩陣套在圖層上）。
+    func outfitImage(_ id: String, _ action: PetAction, _ frame: Int) -> NSImage? {
+        guard let outfit = outfit(id), outfit.anchor != nil else { return outfitFrame(id, action, frame) }
+        guard let (image, t) = anchored(outfit, action, frame) else { return nil }
+        return NSImage(size: canvasSize, flipped: false) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            ctx.concatenate(t)
+            image.draw(in: rect)
+            return true
+        }
     }
 
     // 道具圖（Resources/props/<名字>.png），例如降落傘的傘面。

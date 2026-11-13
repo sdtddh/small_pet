@@ -126,7 +126,9 @@ Resources/
     outfits/vip_wings.png            跟角色輪廓有關的服裝
   shared/                            所有角色共用一份（App 在角色資料夾找不到某一層時來這裡找）
     items.json                       部位、服裝、角色特徵物件、髮型、衣服的清單
-    outfits/<服裝id>.png              服裝疊圖
+    anchors.json                     每一格的錨點矩陣（頭、上半身、手）
+    outfits/<服裝id>/{front,back}.png 只畫一張的服裝（帽子、眼鏡…），跟著錨點動
+    outfits/<服裝id>.png              逐格畫的服裝（氣球、雨傘、翅膀）
     looks/hair/<髮型id>/behind.png    外觀：垂在身後的頭髮
     looks/hair/<髮型id>/back.png      外觀：臉後面的頭髮（背對時是整顆後腦勺）
     looks/hair/<髮型id>/front.png     外觀：臉前面的頭髮（兩側髮束、瀏海）
@@ -164,9 +166,21 @@ manifest 沒有 `sheet` 的，讀一格一張的 `body/<動作>_<格>.png`（支
 - 素材由 `swift Tools/generate-bunny.swift <角色>` 產生，它會自動拼好 sprite sheet。
 - `jump` 的 4 格有固定意義：0 蹲下、1 上升、2 下降、3 落地。
 
-**新增一件衣服**：在 `shared/outfits/` 放 `<新id>.png`，然後在 `shared/items.json` 的 `outfits` 加一筆
-`{"id": "新id", "name": "顯示名稱", "slot": "head"}`（slot 可用 `head`、`face`、`neck`、`back`、`hand`）。
-重新產生素材會覆蓋 `items.json`，所以要長久保留的話，在 `generate-bunny.swift` 的 `outfits` 加一件。
+**錨點服裝**：帽子、眼鏡、圍巾這類形狀不變的服裝只畫一張圖（`outfits/<id>/front.png`，背對時看得到的話再一張 `back.png`），
+用的是「靜止姿勢」。`shared/anchors.json` 記下每個動作每一格的 2D 矩陣（`[a, b, c, d, tx, ty]`，單位是畫布的點，原點在左下角），
+App 把那一格的矩陣套到圖層上，服裝就會跟著頭（`head`）、上半身（`upper`）或手（`hand`，拿胡蘿蔔時收起來）移動、傾斜、壓扁。
+氣球、雨傘、翅膀的形狀每格都不一樣，還是逐格畫（`outfits/<id>.png`）。
+
+**新增一件衣服（手畫，不用寫程式）**：開一張 224×224 的透明畫布（2 倍解析度，對應 112×112 點的畫布），
+照著靜止姿勢的位置畫（可以把 `idle` 第 0 格的本體疊在底下當參考，那一格就是靜止姿勢），存成 `shared/outfits/<新id>/front.png`，
+然後在 `shared/items.json` 的 `outfits` 加一筆：
+
+```json
+{ "id": "beret", "name": "貝雷帽", "slot": "head", "power": 3, "anchor": "head" }
+```
+
+slot 可用 `head`、`face`、`neck`、`back`、`hand`，anchor 可用 `head`、`upper`、`hand`。所有角色、所有動作都能穿。
+重新產生素材會覆蓋 `items.json`，所以要長久保留的話，在 `generate-bunny.swift` 的 `outfits` 加一件（並寫進 `outfitAnchors`）。
 
 **新增一種髮型 / 衣服**：在 `Tools/generate-bunny.swift` 的「外觀」段落照著現有的寫一個 `HairStyle` 或 `ClothesStyle`，
 加進 `hairStyles` / `clothesStyles` 清單，再重新產生素材。髮型只畫頭和頭髮、衣服只畫身體，所以任何組合都對得上。

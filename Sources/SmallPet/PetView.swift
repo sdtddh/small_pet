@@ -54,6 +54,9 @@ final class PetView: NSView {
         for slot in sprites.manifest.slots {
             let l = CALayer()
             setupImageLayer(l)
+            // 錨點服裝的矩陣以畫布左下角為原點（跟產生器一樣），所以圖層的支點也放在左下角
+            l.anchorPoint = .zero
+            l.position = .zero
             outfitLayers[slot.id] = l
         }
     }
@@ -95,9 +98,21 @@ final class PetView: NSView {
             for (i, layer) in bodyLayers.enumerated() {
                 layer.contents = i < images.count ? images[i] : nil
             }
+            // 視窗不是 112 點大時，矩陣的位移要跟著縮放
+            let k = bounds.width / sprites.canvasSize.width
             for (slot, layer) in outfitLayers {
                 let id = outfits[slot]
-                layer.contents = id.flatMap { sprites.outfitFrame($0, action, shownFrame) }
+                if let outfit = id.flatMap(sprites.outfit), outfit.anchor != nil {
+                    // 只畫一張的服裝（帽子、眼鏡…）：套上這一格的矩陣，跟著頭 / 上半身 / 手動
+                    let shown = sprites.anchored(outfit, action, shownFrame)
+                    layer.contents = shown?.image
+                    if let t = shown?.transform {
+                        layer.setAffineTransform(CGAffineTransform(a: t.a, b: t.b, c: t.c, d: t.d, tx: t.tx * k, ty: t.ty * k))
+                    }
+                } else {
+                    layer.setAffineTransform(.identity)
+                    layer.contents = id.flatMap { sprites.outfitFrame($0, action, shownFrame) }
+                }
                 // 翅膀在正面時是在她身後：疊到本體下面，長髮才會蓋在翅膀前面
                 layer.zPosition = id.map { sprites.isBehind($0, action, shownFrame) } == true ? -1 : 0
             }

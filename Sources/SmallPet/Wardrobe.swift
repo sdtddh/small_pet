@@ -261,9 +261,9 @@ struct PetPreview: View {
         let worn = sprites.manifest.slots.compactMap { outfits[$0.id] }
         let behind = worn.filter { sprites.isBehind($0, .idle, 0) }
         let front = worn.filter { !sprites.isBehind($0, .idle, 0) }
-        return behind.compactMap { sprites.outfitFrame($0, .idle, 0) }
+        return behind.compactMap { sprites.outfitImage($0, .idle, 0) }
             + sprites.bodyLayers(look, items: outfits, .idle, 0).compactMap { $0 }
-            + front.compactMap { sprites.outfitFrame($0, .idle, 0) }
+            + front.compactMap { sprites.outfitImage($0, .idle, 0) }
     }
 
     var body: some View {

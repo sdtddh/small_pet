@@ -96,6 +96,7 @@
   },
   "outfits" : [
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -107,6 +108,7 @@
       "slot" : "head"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -118,6 +120,7 @@
       "slot" : "head"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -129,6 +132,7 @@
       "slot" : "face"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -140,6 +144,7 @@
       "slot" : "face"
     },
     {
+      "anchor" : "upper",
       "behind" : false,
       "behindActions" : [
 
@@ -151,6 +156,7 @@
       "slot" : "neck"
     },
     {
+      "anchor" : "upper",
       "behind" : false,
       "behindActions" : [
 
@@ -162,6 +168,7 @@
       "slot" : "neck"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -173,6 +180,7 @@
       "slot" : "head"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -184,6 +192,7 @@
       "slot" : "head"
     },
     {
+      "anchor" : "upper",
       "behind" : false,
       "behindActions" : [
 
@@ -195,6 +204,7 @@
       "slot" : "neck"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -206,6 +216,7 @@
       "slot" : "head"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -217,6 +228,7 @@
       "slot" : "head"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -228,6 +240,7 @@
       "slot" : "head"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -239,6 +252,7 @@
       "slot" : "head"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -250,6 +264,7 @@
       "slot" : "face"
     },
     {
+      "anchor" : "head",
       "behind" : false,
       "behindActions" : [
 
@@ -261,6 +276,7 @@
       "slot" : "face"
     },
     {
+      "anchor" : "upper",
       "behind" : false,
       "behindActions" : [
 
@@ -272,6 +288,7 @@
       "slot" : "neck"
     },
     {
+      "anchor" : null,
       "behind" : false,
       "behindActions" : [
 
@@ -283,6 +300,7 @@
       "slot" : "hand"
     },
     {
+      "anchor" : "hand",
       "behind" : false,
       "behindActions" : [
 
@@ -294,6 +312,7 @@
       "slot" : "hand"
     },
     {
+      "anchor" : null,
       "behind" : false,
       "behindActions" : [
         "parasol"
@@ -305,6 +324,7 @@
       "slot" : "hand"
     },
     {
+      "anchor" : "upper",
       "behind" : false,
       "behindActions" : [
 
@@ -316,6 +336,7 @@
       "slot" : "back"
     },
     {
+      "anchor" : null,
       "behind" : true,
       "behindActions" : [
 
@@ -327,6 +348,7 @@
       "slot" : "back"
     },
     {
+      "anchor" : null,
       "behind" : true,
       "behindActions" : [
 
