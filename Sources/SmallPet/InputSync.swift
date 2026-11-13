@@ -10,7 +10,7 @@
 import AppKit
 
 @MainActor
-final class InputSync {
+final class InputSync: ObservableObject {
 
     private static let defaultsKey = "inputSync"
 
@@ -18,7 +18,7 @@ final class InputSync {
     var onKey: (() -> Void)?
     var onClick: ((NSPoint) -> Void)?
 
-    private(set) var enabled: Bool
+    @Published private(set) var enabled: Bool
     private var monitors: [Any] = []
     private var keyboardMonitored = false
     private var permissionTimer: Timer?

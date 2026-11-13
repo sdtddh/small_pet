@@ -59,6 +59,9 @@ final class Pet {
     // 手動模式下，跳躍 / 掉落結束後要回到的動作。
     private var heldAction: PetAction = .idle
 
+    // 沒開自動行動時，她一直在做的那個動作（跳躍、吃飯這類插播做完會回到它）。
+    var lockedAction: PetAction? { autoMode ? nil : heldAction }
+
     // 插播動作（吃東西、升等跳舞）：做完 actionDuration 秒就回到原本的節奏，
     // 手動模式下也一樣。afterInterlude 在正常做完時呼叫；中途被抓起來就取消。
     private var isInterlude = false

@@ -1,6 +1,9 @@
 // Scenery.swift —— 桌面上的家具佈景：餐桌、電腦桌、鞦韆（一棵樹）、飛機。
 //
-// 每件家具是獨立的透明視窗，擺在螢幕底部、寵物後面。可以左右拖曳，位置會記住。
+// 每件家具是獨立的透明視窗，擺在螢幕底部、寵物後面。按住家具：
+//   - 左右拖：移動（位置會記住）
+//   - 往下拉：收起來（等於在選單取消勾選這件）
+//   - 往上拉：打開這件家具的小工具（電腦桌是計算機）；還沒有小工具的家具會彈一下
 // 選單的「家具與佈景」可以一起顯示 / 隱藏，也可以個別勾選要擺哪幾件。
 // ⌥F 是另一回事：把寵物和家具全部藏起來（見 AppDelegate.toggleEverything），勾選不會變。
 //   - 餐桌：餵食時盤子會放上胡蘿蔔，她自己走過來坐下吃；就算家具是隱藏的也會暫時出現，吃完再收起來。
@@ -99,6 +102,14 @@ final class Scenery {
         refresh(below: pet)
     }
 
+    // 往下拉收起一件家具：取消勾選；一件都不剩就等於關掉總開關。
+    func hide(_ prop: Prop, below pet: NSWindow) {
+        guard isShown(prop), !prop.inUse else { return }
+        prop.enabled = false
+        if !all.contains(where: \.enabled) { pinned = false }
+        refresh(below: pet)
+    }
+
     func releaseAll(below pet: NSWindow) {
         all.forEach { release($0, below: pet) }
     }
@@ -128,6 +139,14 @@ final class Scenery {
             planeHome = plane.window.frame.origin
             plane.window.setImage(planeBack)
             if plane.window.isVisible { planeFront.order(.above, relativeTo: window.windowNumber) }
+        }
+        // 飛行中點到她（或飛機），被點的視窗會跳到最前面，她就穿出機身。每一幀檢查三層的順序，亂了就排回去：
+        // 後層 < 她 < 前層（orderedIndex 越小越前面）。
+        if plane.window.isVisible {
+            if plane.window.orderedIndex < window.orderedIndex { plane.window.order(.below, relativeTo: window.windowNumber) }
+            if !planeFront.isVisible || planeFront.orderedIndex > window.orderedIndex {
+                planeFront.order(.above, relativeTo: window.windowNumber)
+            }
         }
 
         // 圖以視窗中心為基準翻面、傾斜，再把視窗擺到「駕駛座剛好在她屁股下面」的位置。
@@ -180,10 +199,11 @@ final class Prop {
     private let image: NSImage?
     private let activeImage: NSImage?
 
-    // 她正在用（吃飯、打電腦、盪鞦韆）：換圖、不能拖。
+    // 她正在用（吃飯、打電腦、盪鞦韆）：換圖、不能拖、不能往下拉收起來（往上拉開小工具還是可以）。
     var inUse = false {
         didSet {
             window.isDraggable = !inUse
+            window.canSwipeDown = !inUse
             window.setImage(inUse ? activeImage ?? image : image)
         }
     }
@@ -272,12 +292,23 @@ final class SwingRig {
 final class SceneryWindow: NSWindow {
 
     var onMoved: ((CGFloat) -> Void)?
+    var onSwipeDown: (() -> Void)?     // 往下拉：收起來
+    var onSwipeUp: (() -> Void)?       // 往上拉：開小工具（nil = 這件家具還沒有小工具）
     var isDraggable = true
+    var canSwipeDown = true
 
     private let imageView = NSView()
-    // 圖片放在子圖層，才能整張翻面、傾斜（飛機用）。
+    // 拉動時的回饋（往下沉、往上伸）套在 holder 上；圖片在 holder 裡的 art，才能整張翻面、傾斜（飛機用）。
+    private let holder = CALayer()
     private let art = CALayer()
-    private var grabX: CGFloat?
+
+    // 按下去之後先不動，拖超過 dead 點才決定是哪一種手勢；拉超過 trigger 點放手才算數。
+    private enum Gesture { case undecided, move, down, up, none }
+    private var gesture = Gesture.none
+    private var grab = NSPoint.zero        // 按下時滑鼠的位置
+    private var grabX: CGFloat = 0         // 按下時滑鼠離視窗左邊多遠
+    private static let dead: CGFloat = 6
+    private static let trigger: CGFloat = 28
 
     init(image: NSImage?) {
         // 產生器輸出 2 倍解析度的 PNG，NSImage 讀進來的 size 是像素，除以 2 才是點。
@@ -292,10 +323,14 @@ final class SceneryWindow: NSWindow {
 
         imageView.frame = NSRect(origin: .zero, size: size)
         imageView.wantsLayer = true
-        art.frame = imageView.bounds
+        // holder 以底邊中央為支點：往上拉時從地面往上伸長
+        holder.anchorPoint = CGPoint(x: 0.5, y: 0)
+        holder.frame = imageView.bounds
+        art.frame = holder.bounds
         art.contentsGravity = .resizeAspect
         art.actions = ["contents": NSNull(), "transform": NSNull()]   // 每一幀直接換，不要淡入淡出
-        imageView.layer?.addSublayer(art)
+        holder.addSublayer(art)
+        imageView.layer?.addSublayer(holder)
         contentView = imageView
         setImage(image)
     }
@@ -319,24 +354,95 @@ final class SceneryWindow: NSWindow {
 
     // 疊在圖片上面的圖層（鞦韆的繩子）。
     func addOverlay(_ layer: CALayer) {
-        layer.frame = imageView.bounds
-        imageView.layer?.addSublayer(layer)
+        layer.frame = holder.bounds   // 放在 holder 裡，拉動時跟著樹一起動
+        holder.addSublayer(layer)
     }
 
-    // 只能左右拖（家具一直貼著地面）。
+    // MARK: 拖動手勢
+
     override func mouseDown(with event: NSEvent) {
-        grabX = isDraggable ? NSEvent.mouseLocation.x - frame.minX : nil
+        grab = NSEvent.mouseLocation
+        grabX = grab.x - frame.minX
+        gesture = .undecided
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let grabX, let visible = screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
-        let x = min(max(NSEvent.mouseLocation.x - grabX, visible.minX), visible.maxX - frame.width)
-        setFrameOrigin(NSPoint(x: x, y: frame.minY))
+        let now = NSEvent.mouseLocation
+        let dx = now.x - grab.x, dy = now.y - grab.y
+        if gesture == .undecided, hypot(dx, dy) > Self.dead {
+            // 比較偏左右就是移動（家具一直貼著地面）；比較偏上下就是拉
+            if abs(dx) >= abs(dy) {
+                gesture = isDraggable ? .move : .none
+            } else if dy < 0 {
+                gesture = canSwipeDown && onSwipeDown != nil ? .down : .none
+            } else {
+                gesture = .up
+            }
+        }
+        switch gesture {
+        case .move:
+            guard let visible = screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+            let x = min(max(now.x - grabX, visible.minX), visible.maxX - frame.width)
+            setFrameOrigin(NSPoint(x: x, y: frame.minY))
+        case .down:
+            // 往地面沉下去、慢慢變淡；超過門檻後再拉就不太動了（橡皮筋）
+            let d = rubberBand(-dy)
+            setFeedback(CATransform3DMakeTranslation(0, -d, 0), opacity: 1 - 0.5 * min(d / Self.trigger, 1))
+        case .up:
+            // 從地面往上伸長一點；沒有小工具的家具伸得比較少
+            let k: CGFloat = onSwipeUp == nil ? 0.004 : 0.008
+            setFeedback(CATransform3DMakeScale(1, 1 + rubberBand(dy) * k, 1), opacity: 1)
+        case .undecided, .none:
+            break
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
-        if grabX != nil { onMoved?(frame.minX) }
-        grabX = nil
+        let dy = NSEvent.mouseLocation.y - grab.y
+        switch gesture {
+        case .move:
+            onMoved?(frame.minX)
+        case .down where -dy >= Self.trigger:
+            // 整個沉到地下再收起來
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(0.18)
+            CATransaction.setCompletionBlock { [weak self] in
+                self?.onSwipeDown?()
+                self?.setFeedback(CATransform3DIdentity, opacity: 1)   // 下次顯示時是原本的樣子
+            }
+            holder.transform = CATransform3DMakeTranslation(0, -frame.height, 0)
+            holder.opacity = 0
+            CATransaction.commit()
+        case .up where dy >= Self.trigger:
+            springBack()
+            onSwipeUp?()
+        default:
+            springBack()
+        }
+        gesture = .none
+    }
+
+    // 拉越遠阻力越大：門檻以內 1:1，之後只跟一點點。
+    private func rubberBand(_ d: CGFloat) -> CGFloat {
+        let d = max(d, 0)
+        return d <= Self.trigger ? d : Self.trigger + (d - Self.trigger) * 0.15
+    }
+
+    // 拖曳中直接套用，不要動畫（不然會跟不上滑鼠）。
+    private func setFeedback(_ transform: CATransform3D, opacity: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        holder.transform = transform
+        holder.opacity = Float(opacity)
+        CATransaction.commit()
+    }
+
+    private func springBack() {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.2)
+        holder.transform = CATransform3DIdentity
+        holder.opacity = 1
+        CATransaction.commit()
     }
 }
 

@@ -117,7 +117,7 @@ final class WardrobeWindowController {
     func show() {
         if window == nil {
             let w = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 420, height: 600),
+                contentRect: NSRect(x: 0, y: 0, width: 450, height: 600),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -148,7 +148,7 @@ struct WardrobeView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     // 外觀：髮型、衣服（純外觀，不加戰鬥力）
                     if let looks = sprites.manifest.looks {
-                        Text("外觀（不影響戰鬥力）").font(.caption).foregroundStyle(.secondary)
+                        Text("外觀（不影響戰鬥力）").font(.callout).foregroundStyle(.secondary)
                         lookRow("髮型", looks.hair, selected: wardrobe.look.hair) { id in
                             var l = wardrobe.look; l.hair = id; return l
                         } choose: { wardrobe.setHair($0) }
@@ -160,7 +160,7 @@ struct WardrobeView: View {
                             slotRow(slot)
                         }
                         Divider()
-                        Text("配件").font(.caption).foregroundStyle(.secondary)
+                        Text("配件").font(.callout).foregroundStyle(.secondary)
                     }
                     // 由上往下顯示：手上 → 頭 → 臉 → 脖子 → 背後（manifest 裡是疊圖順序，所以反過來）
                     ForEach(sprites.manifest.slots.reversed()) { slot in
@@ -171,7 +171,7 @@ struct WardrobeView: View {
             }
         }
         .padding(.vertical)
-        .frame(minWidth: 420, minHeight: 600)
+        .frame(minWidth: 450, minHeight: 600)
     }
 
     private func lookRow(_ title: String, _ options: [Manifest.LookOption], selected: String,
@@ -194,7 +194,7 @@ struct WardrobeView: View {
     // 選項排成會自動換行的格子。不用橫向 ScrollView：它包在直向 ScrollView 裡時，
     // 游標停在某一排上用觸控板上下滑，滑動常被那一排吃掉，整個視窗就滑不動。
     private func optionGrid(@ViewBuilder content: () -> some View) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: 10, alignment: .top)],
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 10, alignment: .top)],
                   alignment: .leading, spacing: 10, content: content)
     }
 
@@ -203,10 +203,10 @@ struct WardrobeView: View {
         VStack(spacing: 4) {
             preview().frame(width: 64, height: 64)
             // 長名字換行（最多兩行），字不縮小；兩行固定高度讓卡片對齊，游標停上去看全名。
-            Text(name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
-                .frame(height: 30, alignment: .top)
+            Text(name).font(.callout).lineLimit(2).multilineTextAlignment(.center)
+                .frame(height: 36, alignment: .top)
         }
-        .frame(width: 68)
+        .frame(width: 76)
         .help(name)
         .padding(6)
         .background(
