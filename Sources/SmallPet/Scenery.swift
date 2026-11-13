@@ -304,6 +304,14 @@ final class SceneryWindow: NSWindow {
         art.contents = image
     }
 
+    // 把寵物拖到這件家具上時，家具周圍亮起一圈光，表示放手就會用它。
+    func setHighlighted(_ on: Bool) {
+        art.shadowColor = NSColor(calibratedRed: 1, green: 0.85, blue: 0.35, alpha: 1).cgColor
+        art.shadowOffset = .zero
+        art.shadowRadius = 5
+        art.shadowOpacity = on ? 1 : 0
+    }
+
     // 以視窗中心為基準翻面 / 旋轉圖片。
     func setArtTransform(_ transform: CGAffineTransform) {
         art.setAffineTransform(transform)

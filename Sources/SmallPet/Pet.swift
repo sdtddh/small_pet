@@ -97,13 +97,23 @@ final class Pet {
     private var dragSamples: [(time: Double, point: NSPoint)] = []
     private var wasThrown = false   // 被甩出去，落地時要說話
 
+    // 拖到家具上放手：拖曳中每次移動都回報她現在的位置（讓家具亮起來，放手時傳 nil）；
+    // 放手時問 onDrop 這裡有沒有家具，有的話她直直落下（不甩出去），落地後執行它回傳的事。
+    var onDragHover: ((NSRect?) -> Void)?
+    var onDrop: ((NSRect) -> (() -> Void)?)?
+    private var afterLanding: (() -> Void)?
+
     // 自動換動作時，碎念的機率。
     var chatterChance = 0.3
 
-    // 跟著你打字：按了幾個鍵（決定 keytap / typing 顯示哪一格）、最後一次按鍵的時間。
-    private var keyCount = 0
-    private var lastKeyTime: Double = -10
-    private var keysRecent: Bool { CACurrentMediaTime() - lastKeyTime < 0.6 }
+    // 跟著你打字 / 點擊：按了幾次（決定跳舞、打電腦顯示哪一格）、最後一次按的時間。
+    private var inputCount = 0
+    private var lastInputTime: Double = -10
+    private var inputRecent: Bool { CACurrentMediaTime() - lastInputTime < 0.6 }
+    // 正在跟著你的節奏跳舞（跟升等慶祝、自動模式的跳舞分開，那些照時間播）。
+    private var syncDancing = false
+    // 停手多久之後才停下來。
+    private let syncLinger: Double = 1.5
 
     init(sprites: SpriteLibrary, speech: PetSpeech) {
         self.sprites = sprites
@@ -231,32 +241,41 @@ final class Pet {
 
     // MARK: - 跟著你打字 / 點擊（InputSync 呼叫）
 
-    // 你按了一個鍵：她跟著敲一下。在電腦桌前打電腦時，她的手也改成跟著你的節奏。
+    // 你按了一個鍵：在電腦桌前打電腦時，她的手跟著你的節奏敲；不在電腦桌前就跟著跳一步舞。
     func keyPressed() {
-        keyCount += 1
-        lastKeyTime = CACurrentMediaTime()
-        if action == .keytap {
-            actionDuration = actionTime + PetAction.keytap.autoDuration.lowerBound   // 繼續打，停手 1.5 秒後才結束
+        if action == .typing {
+            inputCount += 1
+            lastInputTime = CACurrentMediaTime()
             return
         }
-        if action == .typing { return }
-        // 睡覺、被抓、在空中、出門、正在忙（走去吃飯、盪鞦韆、開飛機…）時不打擾她；剛被點一下的話可以接著打
-        guard canAct, action != .sleep, !isBusy || action == .tap else { return }
-        let first = action != .tap
-        setAction(.keytap)
-        isInterlude = true
-        if first { speech.say("keytap", chance: 0.25, force: false) }
+        danceStep()
     }
 
-    // 你在螢幕某處點了一下滑鼠：她轉頭看過去，舉手「點！」一下。
+    // 你在螢幕某處點了一下滑鼠：不在電腦桌前就轉向游標那邊、跟著跳一步舞。
     func mouseClicked(at point: NSPoint) {
-        guard canAct, action != .sleep, action != .typing else { return }
-        if isBusy, action != .tap, action != .keytap { return }
+        guard action != .typing else { return }   // 打電腦時專心打字
+        guard danceStep() else { return }
         let center = posX + size.width / 2
         if abs(point.x - center) > 4 { direction = point.x > center ? 1 : -1 }
-        if action == .keytap { return }   // 正在跟你打字：轉頭看一下就好
-        setAction(.tap)
+    }
+
+    // 每按一次跳一格：你按越快她跳越快，停手 1.5 秒後回去做原本的事。
+    // 睡覺、被抓、在空中、出門、正在忙（走去吃飯、盪鞦韆、開飛機、升等跳舞…）時不打擾她。回傳有沒有跳。
+    @discardableResult
+    private func danceStep() -> Bool {
+        if action == .dance, syncDancing {
+            inputCount += 1
+            actionDuration = actionTime + syncLinger
+            return true
+        }
+        guard canAct, action != .sleep, !isBusy else { return false }
+        setAction(.dance)
         isInterlude = true
+        syncDancing = true
+        inputCount = 0
+        actionDuration = syncLinger
+        speech.say("syncdance", chance: 0.25, force: false)
+        return true
     }
 
     // 單擊：睡覺中就被叫醒，否則回應一句。
@@ -273,6 +292,7 @@ final class Pet {
     private func setAction(_ newAction: PetAction) {
         action = newAction
         isInterlude = false
+        syncDancing = false
         afterInterlude = nil
         walkTarget = nil
         afterWalk = nil
@@ -395,6 +415,7 @@ final class Pet {
             return
         case .fall:
             finishAirAction()
+            runAfterLanding()
             return
         default:
             break
@@ -518,17 +539,25 @@ final class Pet {
         } else {
             if wasThrown || action == .parachute { speech.say("landed") }
             finishAirAction()
+            runAfterLanding()
         }
         wasThrown = false
+    }
+
+    // 落地了：有被放到家具上的話，現在去用它。
+    private func runAfterLanding() {
+        let done = afterLanding
+        afterLanding = nil
+        done?()
     }
 
     // 目前該顯示第幾格。
     private func currentFrame() -> Int {
         let info = sprites.info(action)
         let last = max(info.frames - 1, 0)
-        // 跟著你打字：每按一個鍵換一格
-        if action == .keytap || (action == .typing && keysRecent) {
-            return keyCount % max(info.frames, 1)
+        // 跟著你打字 / 點擊：每按一次換一格
+        if (action == .dance && syncDancing) || (action == .typing && inputRecent) {
+            return inputCount % max(info.frames, 1)
         }
         if action == .jump {
             // 跳躍的格子由物理狀態決定：0 蹲、1 上升、2 下降、3 落地
@@ -548,6 +577,7 @@ final class Pet {
         vx = 0
         vy = 0
         dragSamples = []
+        afterLanding = nil
         setAction(.dragged)
         speech.say("dragged")
     }
@@ -559,6 +589,7 @@ final class Pet {
         let now = CACurrentMediaTime()
         dragSamples.append((now, origin))
         dragSamples.removeAll { now - $0.time > 0.1 }   // 只看最近 0.1 秒
+        onDragHover?(NSRect(origin: origin, size: size))
     }
 
     private func dragEnded() {
@@ -572,6 +603,16 @@ final class Pet {
             vy = min(max((last.point.y - first.point.y) / dt, -limit), limit)
         }
         if posY < ground { posY = ground }
+        onDragHover?(nil)
+        if let action = onDrop?(NSRect(x: posX, y: posY, width: size.width, height: size.height)) {
+            // 放在家具上：不甩出去，直直落下，落地後去用它
+            vx = 0
+            vy = 0
+            wasThrown = false
+            afterLanding = action
+            setAction(.fall)
+            return
+        }
         // 甩得夠用力才算「被丟出去」
         wasThrown = hypot(vx, vy) > 500
         if wasThrown { speech.say("thrown") }

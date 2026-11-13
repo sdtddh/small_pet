@@ -54,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         scenery.restore(below: pet.window)
         HotKey.register { [weak self] in self?.toggleEverything() }
         pet.onOuting = { [weak self] in self?.goOut() ?? false }
+        pet.onDragHover = { [weak self] frame in self?.highlightProp(under: frame) }
+        pet.onDrop = { [weak self] frame in self?.dropAction(at: frame) }
         pet.speech.follow(pet.window.frame)
         if stats.run != nil {
             pet.hideAway()   // 上次關掉 App 時她還在冒險，時間到了會在動畫迴圈裡回家
@@ -333,6 +335,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let nap = Double.random(in: 0..<1) < 0.35
             self.pet.speech.say(nap ? "sleep" : "corner", chance: self.pet.chatterChance, force: false)
             self.pet.interlude(nap ? .sleep : .sit, duration: .random(in: 40...120))
+        }
+    }
+
+    // MARK: - 拖到家具上
+
+    private var highlightedProp: Prop?
+
+    // 她在 frame（她的視窗）的位置下面是哪件家具：用她身體中間、靠腳的那一點判斷，
+    // 家具範圍往上多算一點，放在家具上方一點點也算。只看有擺出來、沒在用的家具。
+    private func prop(under frame: NSRect) -> Prop? {
+        let point = NSPoint(x: frame.midX, y: frame.minY + 20)
+        return scenery.all.first { prop in
+            scenery.isShown(prop) && !prop.inUse && prop.window.isVisible
+                && prop.window.frame.insetBy(dx: -6, dy: -24).contains(point)
+        }
+    }
+
+    private func highlightProp(under frame: NSRect?) {
+        let target = frame.flatMap { prop(under: $0) }
+        guard target !== highlightedProp else { return }
+        highlightedProp?.window.setHighlighted(false)
+        target?.window.setHighlighted(true)
+        highlightedProp = target
+    }
+
+    // 放手時：在家具上的話，回傳落地後要做的事（吃飯、打電腦、盪鞦韆、開飛機）。
+    private func dropAction(at frame: NSRect) -> (() -> Void)? {
+        guard !pet.concealed, !scenery.mealInProgress, let prop = prop(under: frame) else { return nil }
+        return { [weak self] in
+            guard let self else { return }
+            if prop === self.scenery.dining {
+                self.feed()   // 今天餵滿了的話她會說吃不下
+            } else if prop === self.scenery.computer {
+                self.visit(prop, doing: .typing)
+            } else if prop === self.scenery.swing {
+                self.visit(prop, doing: .swing)
+            } else if prop === self.scenery.plane {
+                self.visit(prop, doing: .fly)
+            }
         }
     }
 

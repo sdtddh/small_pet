@@ -1771,10 +1771,6 @@ let actions: [ActionSpec] = [
     // 一格是擺盪的四分之一週期，要跟程式裡的 swingPeriod（2.4 秒）對上
     ActionSpec(name: "swing", frames: 4, fps: 4 / 2.4, loop: true),
     ActionSpec(name: "fly", frames: 2, fps: 4, loop: true),
-    // 跟著你打字：每按一個鍵換下一格（fps 只是備用）
-    ActionSpec(name: "keytap", frames: 4, fps: 8, loop: true),
-    // 你點一下滑鼠：她舉手「點！」一下
-    ActionSpec(name: "tap", frames: 2, fps: 6, loop: false),
 ]
 
 func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
@@ -1912,29 +1908,6 @@ func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
         p.ears = i == 0 ? 0.55 : 0.68
         p.eyes = i == 0 ? .open : .happy
         p.mouthOpen = i == 1
-    case "keytap":
-        // 站著在空中打字：雙手在胸前一上一下輪流敲，盯著前面，偶爾開心張嘴
-        let even = i % 2 == 0
-        p.lean = 0.06
-        p.squashY = even ? 1 : 0.985
-        p.armFront = even ? 1.62 : 1.36
-        p.armBack = even ? 1.34 : 1.6
-        p.headTilt = 0.04
-        p.ears = even ? 0.04 : 0.14
-        p.mouthOpen = i == 3
-    case "tap":
-        // 點一下：前手往上一指、耳朵豎起來、輕輕彈一下
-        if i == 0 {
-            p.bodyY = 2
-            p.squashY = 1.03; p.squashX = 0.98
-            p.armFront = 2.45; p.armBack = 0.35
-            p.ears = -0.2
-            p.eyes = .happy
-            p.mouthOpen = true
-        } else {
-            p.armFront = 1.9; p.armBack = 0.25
-            p.ears = 0.05
-        }
     case "parachute":
         // 吊在傘下：雙手抓繩、腳懸空晃來晃去
         p.straps = true

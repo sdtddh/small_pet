@@ -35,11 +35,6 @@
       "frames" : 4,
       "loop" : false
     },
-    "keytap" : {
-      "fps" : 8,
-      "frames" : 4,
-      "loop" : true
-    },
     "parachute" : {
       "fps" : 4,
       "frames" : 4,
@@ -64,11 +59,6 @@
       "fps" : 1.6666666666666667,
       "frames" : 4,
       "loop" : true
-    },
-    "tap" : {
-      "fps" : 6,
-      "frames" : 2,
-      "loop" : false
     },
     "typing" : {
       "fps" : 6,
