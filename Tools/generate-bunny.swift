@@ -198,14 +198,39 @@ let footFront = CGPoint(x: 56, y: 8)
 
 // MARK: - 本體
 
-// 本體拆成四層，好讓髮型和服裝可以自由搭配（見下方「外觀」）。由下往上：
-//   hairBehind  垂在身體後面的長髮（雙馬尾、公主切的長髮…）
-//   base        腳、垂下的手、衣服（還有降落傘的繩子）
-//   head        頭：兔耳、臉、頭髮（背對時還有兔尾巴和蓋住背的長髮）
-//   top         擋在頭前面的東西：舉高的手、胡蘿蔔、睡覺的 z
-// 四層全畫 = 完整的她；App 會依目前選的髮型 / 服裝，各層挑對應的圖疊起來。
-enum BodyPart { case hairBehind, base, head, top }
-let allParts: Set<BodyPart> = [.hairBehind, .base, .head, .top]
+// 本體拆成好幾層，好讓髮型、衣服、角色特徵（兔耳…）可以自由搭配（見下方「外觀」）。由下往上：
+//   hairBehind  垂在身體後面的長髮（雙馬尾、公主切的長髮…）          ← 髮型
+//   base        腳、垂下的手、衣服（還有降落傘的繩子）                ← 衣服
+//   tail        兔尾巴（背對時才看得到）                              ← 物件 bunny_tail
+//   ears        兔耳                                                  ← 物件 bunny_ears
+//   hairBack    臉後面的頭髮（背對時是整顆後腦勺）                    ← 髮型
+//   face        臉（皮膚）                                            ← 角色
+//   hairFront   臉前面的頭髮：兩側髮束、瀏海                          ← 髮型
+//   earrings    耳環                                                  ← 物件 diamond_earrings
+//   features    臉頰、眼睛、嘴巴（畫在瀏海上面）                      ← 角色
+//   top         擋在頭前面的東西：舉高的手、胡蘿蔔、睡覺的 z          ← 衣服
+// 全部畫 = 完整的她；App 會依目前選的髮型 / 衣服 / 物件，各層挑對應的圖疊起來。
+enum BodyPart: CaseIterable { case hairBehind, base, tail, ears, hairBack, face, hairFront, earrings, features, top }
+let allParts = Set(BodyPart.allCases)
+
+// 角色特徵物件：跟服裝一樣可以穿脫、任何角色都能穿，但畫在本體的圖層之間（見 BodyPart）。
+// origin 是原本屬於哪個角色（衣櫃顯示成「兔耳（阿米婭）」）；colorFromHair 的物件用髮色畫，每種髮型各一張。
+struct BodyItem {
+    let id: String
+    let name: String
+    let slot: String
+    let part: BodyPart
+    let origin: String
+    let colorFromHair: Bool
+}
+let bodyItems = [
+    BodyItem(id: "bunny_tail", name: "兔尾巴", slot: "tail", part: .tail, origin: "amiya", colorFromHair: true),
+    BodyItem(id: "bunny_ears", name: "兔耳", slot: "ears", part: .ears, origin: "amiya", colorFromHair: true),
+    BodyItem(id: "diamond_earrings", name: "菱形耳環", slot: "earrings", part: .earrings, origin: "rim", colorFromHair: false),
+]
+// 身上的物件。預設是角色原本的樣子；產生物件圖層時會暫時改掉。
+let defaultItems: Set<String> = rim ? ["diamond_earrings"] : ["bunny_ears", "bunny_tail"]
+var items = defaultItems
 
 func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
     if p.back { return drawBodyBack(ctx, p, parts) }
@@ -234,9 +259,7 @@ func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
         }
     }
 
-    if parts.contains(.head) {
-        withState(ctx, head(p)) { drawHead(ctx, p) }
-    }
+    withState(ctx, head(p)) { drawHead(ctx, p, parts) }
 
     if parts.contains(.top) {
         // 胡蘿蔔在臉前面、手的後面，看起來像握在手裡
@@ -273,17 +296,19 @@ func drawBodyBack(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
         }
     }
 
-    if parts.contains(.head) {
-        // 圓圓的兔尾巴（跟頭髮同色；理芽沒有）
-        if !rim { withState(ctx, upper(p)) {
+    // 圓圓的兔尾巴（跟頭髮同色）
+    if parts.contains(.tail) && items.contains("bunny_tail") {
+        withState(ctx, upper(p)) {
             shape(ctx, ellipse(50 + p.tail, 20, 10, 9), look.hair.color)
             shape(ctx, ellipse(48.5 + p.tail, 21.5, 3.5, 2.5), look.hair.shine, stroke: false)
-        } }
+        }
+    }
 
-        withState(ctx, head(p)) {
-            // 兔耳背面：沒有粉色內側
+    withState(ctx, head(p)) {
+        // 兔耳背面：沒有粉色內側
+        if parts.contains(.ears) && items.contains("bunny_ears") {
             for (root, base, k) in [(CGPoint(x: 40, y: 72), CGFloat(0.3), CGFloat(1)),
-                                    (CGPoint(x: 60, y: 72), CGFloat(-0.3), CGFloat(1))] where !rim {
+                                    (CGPoint(x: 60, y: 72), CGFloat(-0.3), CGFloat(1))] {
                 withState(ctx, { c in
                     c.translateBy(x: root.x, y: root.y)
                     c.rotate(by: base + p.ears * k)
@@ -291,8 +316,8 @@ func drawBodyBack(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
                     shape(ctx, ellipse(0, 13, 12, 28), look.hair.dark)
                 }
             }
-            look.hair.backView(ctx, p)
         }
+        if parts.contains(.hairBack) { look.hair.backView(ctx, p) }
     }
 
     if parts.contains(.top) {
@@ -373,27 +398,37 @@ func drawArm(_ ctx: CGContext, _ s: CGPoint, _ angle: CGFloat) {
     shape(ctx, ellipse(h.x, h.y, 7.5, 7.5), white, lineWidth: 1.8)
 }
 
-func drawHead(_ ctx: CGContext, _ p: Pose) {
+func drawHead(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
     // 兔耳（先畫，讓頭髮蓋住耳根）
-    for (root, base, k) in [(CGPoint(x: 40, y: 72), CGFloat(0.3), CGFloat(1)),
-                            (CGPoint(x: 60, y: 74), CGFloat(-0.18), CGFloat(0.8))] where !rim {
-        withState(ctx, { c in
-            c.translateBy(x: root.x, y: root.y)
-            c.rotate(by: base + p.ears * k)
-        }) {
-            shape(ctx, ellipse(0, 13, 12, 28), look.hair.color)
-            shape(ctx, ellipse(0.5, 14, 5.5, 19), earInner, stroke: false)
+    if parts.contains(.ears) && items.contains("bunny_ears") {
+        for (root, base, k) in [(CGPoint(x: 40, y: 72), CGFloat(0.3), CGFloat(1)),
+                                (CGPoint(x: 60, y: 74), CGFloat(-0.18), CGFloat(0.8))] {
+            withState(ctx, { c in
+                c.translateBy(x: root.x, y: root.y)
+                c.rotate(by: base + p.ears * k)
+            }) {
+                shape(ctx, ellipse(0, 13, 12, 28), look.hair.color)
+                shape(ctx, ellipse(0.5, 14, 5.5, 19), earInner, stroke: false)
+            }
         }
     }
 
     // 後腦的頭髮（在臉後面）
-    look.hair.backOfHead(ctx, p)
+    if parts.contains(.hairBack) { look.hair.backOfHead(ctx, p) }
 
     // 臉
-    shape(ctx, ellipse(54, 51, 40, 32), skin)
+    if parts.contains(.face) { shape(ctx, ellipse(54, 51, 40, 32), skin) }
 
     // 臉前面的頭髮：兩側髮束、瀏海、光澤
-    look.hair.front(ctx, p)
+    if parts.contains(.hairFront) { look.hair.front(ctx, p) }
+
+    // 菱形耳環（掛在兩側髮束上）
+    if parts.contains(.earrings) && items.contains("diamond_earrings") {
+        drawEarring(ctx, at: pt(34.5, 38))
+        drawEarring(ctx, at: pt(70, 37))
+    }
+
+    guard parts.contains(.features) else { return }
 
     // 臉頰
     shape(ctx, ellipse(40, 44, 7, 3.6), cheek, stroke: false)
@@ -1134,7 +1169,7 @@ let outfits: [Outfit] = [
             let hook = quad(pt(h.x, h.y - 2), pt(h.x + 5, h.y - 5), pt(h.x + 1.5, h.y - 10))
             line(ctx, hook, outline, width: 3.2)
             line(ctx, hook, umbrellaWine, width: 1.7)
-            cutOutBody(ctx, p, fromBehind: true)   // 傘柄在頭和身體後面，手（本體）蓋在上面像握著
+            // 傘柄在頭和身體後面、手（本體）蓋在上面像握著：parasol 這個動作 App 會把它疊在本體下面（behindActions）
             return
         }
         withState(ctx, upper(p)) {
@@ -1230,7 +1265,7 @@ let outfits: [Outfit] = [
                 wing(CGPoint(x: 37, y: 29), 1, white)
             }
         }
-        cutOutBody(ctx, p)
+        // 正面時 App 把翅膀疊在本體下面（behind），身體自然會蓋住它，不用挖
     },
     Outfit(id: "vip_wings", name: "VIP 星耀之翼", slot: "back") { ctx, p in
         drawVIPWings(ctx, p)
@@ -1341,10 +1376,8 @@ let amiyaHair = HairStyle(
         // 兩側垂下的髮束
         shape(ctx, petal(pt(31, 62), pt(31, 37), width: 7), hair, lineWidth: 1.8)
         if rim {
-            // 臉旁邊的辮子 + 菱形耳環
-            drawEarring(ctx, at: pt(34.5, 38))
+            // 臉旁邊的辮子（菱形耳環是另外的物件 diamond_earrings，畫在 drawHead）
             drawBraid(ctx, top: pt(75, 58), bottom: pt(76, 44), sway: p.ears)
-            drawEarring(ctx, at: pt(70, 37))
         } else {
             shape(ctx, petal(pt(76, 60), pt(74, 38), width: 6), hair, lineWidth: 1.8)
         }
@@ -2496,10 +2529,10 @@ let fm = FileManager.default
 // 跟角色無關的圖層只存一份，放在 Resources/shared/（App 在角色資料夾找不到時會去那裡找）。
 // 跟角色有關的：
 //   - 用 cutOutBody 挖掉她身體的服裝（挖的是這個角色的輪廓，例如兔耳）
-//   - original 髮型 / 衣服（顏色跟著角色）
-//   - 髮型的 head 層（裡面還畫了臉、眼睛、兔耳）
+//   - original 髮型 / 衣服，以及用 original 髮色畫的物件（顏色跟著角色）
+//   - 臉（face、features）
 let sharedRoot = resourcesRoot.appendingPathComponent("shared")
-let characterOutfits: Set<String> = ["umbrella", "wings", "vip_wings"]
+let characterOutfits: Set<String> = ["vip_wings"]
 
 func isShared(_ relative: String) -> Bool {
     let parts = relative.split(separator: "/").map(String.init)
@@ -2507,9 +2540,11 @@ func isShared(_ relative: String) -> Bool {
     case "outfits":
         return parts.count > 1 && !characterOutfits.contains(parts[1].replacingOccurrences(of: ".png", with: ""))
     case "looks":
-        // looks/hair/<id>/behind.png、looks/clothes/<id>/{base,top}.png
-        guard parts.count == 4, parts[2] != "original" else { return false }
-        return parts[1] == "clothes" || parts[3] == "behind.png"
+        // looks/hair/<id>/{behind,back,front}.png、looks/clothes/<id>/{base,top}.png：original 是角色自己的
+        return parts.count == 4 && parts[2] != "original"
+    case "items":
+        // items/<id>.png 共用；items/<id>/<髮型>.png 用髮色畫，original 髮型的顏色跟著角色
+        return parts.count == 2 || (parts.count == 3 && parts[2] != "original.png")
     default:
         return false
     }
@@ -2518,10 +2553,10 @@ func isShared(_ relative: String) -> Bool {
 // 先清掉舊圖（舊的一格一張圖、已經刪掉的服裝、不再產生的 body）。共用的圖每個角色都會重新產生一次，一起清。
 // LOOK_PREVIEW 只重畫幾格，要沿用舊的 sprite sheet，不清。
 if ProcessInfo.processInfo.environment["LOOK_PREVIEW"] == nil {
-    for dir in ["body", "body.png", "outfits", "looks"] {
+    for dir in ["body", "body.png", "outfits", "looks", "items", "face.png", "features.png"] {
         try? fm.removeItem(at: outputRoot.appendingPathComponent(dir))
     }
-    for dir in ["outfits", "looks"] {
+    for dir in ["outfits", "looks", "items"] {
         try? fm.removeItem(at: sharedRoot.appendingPathComponent(dir))
     }
 }
@@ -2630,12 +2665,28 @@ for spec in actions {
         p.frameCount = spec.frames
         if p.back { backFrames[spec.name, default: []].append(i) }
         if let previewFrames, !previewFrames.contains("\(spec.name)_\(i)") { continue }
+        // 角色自己的臉（皮膚 / 五官），跟髮型、衣服無關
+        addFrame(renderPNG { drawBody($0, p, [.face]) }, "face", spec.name, i)
+        addFrame(renderPNG { drawBody($0, p, [.features]) }, "features", spec.name, i)
+        count += 2
         for hair in hairStyles {
             look = Look(hair: hair, clothes: amiyaClothes)
             addFrame(renderPNG { drawBody($0, p, [.hairBehind]) }, "looks/hair/\(hair.id)/behind", spec.name, i)
-            addFrame(renderPNG { drawBody($0, p, [.head]) }, "looks/hair/\(hair.id)/head", spec.name, i)
-            count += 2
+            addFrame(renderPNG { drawBody($0, p, [.hairBack]) }, "looks/hair/\(hair.id)/back", spec.name, i)
+            addFrame(renderPNG { drawBody($0, p, [.hairFront]) }, "looks/hair/\(hair.id)/front", spec.name, i)
+            count += 3
         }
+        // 角色特徵物件：用髮色畫的每種髮型各一張
+        for item in bodyItems {
+            items = [item.id]
+            for hair in item.colorFromHair ? hairStyles : [amiyaHair] {
+                look = Look(hair: hair, clothes: amiyaClothes)
+                addFrame(renderPNG { drawBody($0, p, [item.part]) },
+                         item.colorFromHair ? "items/\(item.id)/\(hair.id)" : "items/\(item.id)", spec.name, i)
+                count += 1
+            }
+        }
+        items = defaultItems
         for clothes in clothesStyles {
             look = Look(hair: amiyaHair, clothes: clothes)
             addFrame(renderPNG { drawBody($0, p, [.base]) }, "looks/clothes/\(clothes.id)/base", spec.name, i)
@@ -2647,8 +2698,10 @@ for spec in actions {
 look = defaultLook
 try writeSheets()
 
-// 會呼叫 cutOutBody、畫在她身後的服裝：正面時 App 把它們疊在身體下面，長髮才會蓋在翅膀前面。
+// 畫在她身後的服裝：正面時 App 把它們疊在身體下面，長髮才會蓋在翅膀前面。
 let behindOutfits: Set<String> = ["wings", "vip_wings"]
+// 只有某些動作才疊在身體下面的服裝（撐傘飄下來時，傘柄在頭和身體後面）。
+let behindActions: [String: [String]] = ["umbrella": ["parasol"]]
 
 // manifest.json：程式靠它知道有哪些動作、幾格、多快，以及有哪些服裝。
 let manifest: [String: Any] = [
@@ -2668,8 +2721,21 @@ let manifest: [String: Any] = [
     "outfits": outfits.map {
         ["id": $0.id, "name": $0.name, "slot": $0.slot,
          "power": outfitPower[$0.id] ?? 0, "dungeon": dungeonOutfits.contains($0.id),
-         "behind": behindOutfits.contains($0.id)] as [String: Any]
+         "behind": behindOutfits.contains($0.id), "behindActions": behindActions[$0.id] ?? []] as [String: Any]
+    } + bodyItems.map {
+        ["id": $0.id, "name": $0.name, "slot": $0.slot, "power": 0, "dungeon": false, "behind": false,
+         "origin": $0.origin, "colorFromHair": $0.colorFromHair] as [String: Any]
     },
+    // 畫在本體圖層之間的部位（尾巴、耳朵、耳飾），跟 slots 不同，不是疊在最上面
+    "bodySlots": [
+        ["id": "ears", "name": "耳朵"],
+        ["id": "tail", "name": "尾巴"],
+        ["id": "earrings", "name": "耳飾"],
+    ],
+    // 角色原本的樣子：部位 id → 物件 id（第一次開啟、或從舊版升級時穿上）
+    "defaultItems": Dictionary(uniqueKeysWithValues: bodyItems.filter { defaultItems.contains($0.id) }.map { ($0.slot, $0.id) }),
+    // 物件原本屬於哪個角色時，顯示用的角色名字
+    "characterNames": characterNames,
     // 外觀（髮型 / 服裝）：純外觀、不加戰鬥力。第一個是預設。
     "looks": [
         "hair": hairStyles.map { ["id": $0.id, "name": $0.name] },

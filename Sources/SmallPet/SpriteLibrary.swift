@@ -35,6 +35,9 @@ struct Manifest: Decodable {
         let power: Int?       // 戰鬥力加成（舊素材沒有這欄就當 0）
         let dungeon: Bool?    // true：要從地下城拿到才能穿
         let behind: Bool?     // true：畫在她身後（翅膀），正面時要疊在本體下面
+        let behindActions: [String]?  // 這些動作時也疊在本體下面（撐傘飄下來時的傘柄）
+        let origin: String?   // 原本屬於哪個角色（兔耳是阿米婭的），衣櫃顯示成「兔耳（阿米婭）」
+        let colorFromHair: Bool?      // 用髮色畫：每種髮型各一張圖 items/<id>/<髮型id>.png
     }
     // 純外觀的髮型 / 衣服（不加戰鬥力）。第一個是預設。
     struct LookOption: Decodable, Identifiable {
@@ -59,6 +62,10 @@ struct Manifest: Decodable {
         let start: [String: Int]
     }
     let sheet: Sheet?
+    // 畫在本體圖層之間的部位（耳朵、尾巴、耳飾），物件一樣放在 outfits 裡
+    let bodySlots: [Slot]?
+    let defaultItems: [String: String]?     // 角色原本的樣子：部位 id → 物件 id
+    let characterNames: [String: String]?   // 角色 id → 名字（顯示物件來源用）
 }
 
 // 目前選的外觀：髮型 id + 衣服 id。
@@ -106,16 +113,53 @@ final class SpriteLibrary {
             ?? image(in: "body", action: .idle, frame: frame)
     }
 
-    // 本體的各層圖，由下往上：垂在身後的頭髮、衣服和手腳、頭、舉高的手。
-    // 素材沒有外觀圖層的話，就只有一張完整的 body 圖。
-    func bodyLayers(_ look: Look, _ action: PetAction, _ frame: Int) -> [NSImage?] {
+    // 本體有幾層（PetView 依這個數字建圖層）。
+    var bodyLayerCount: Int {
+        manifest.looks == nil ? 1 : manifest.bodySlots == nil ? 4 : 10
+    }
+
+    // 本體的各層圖，由下往上（見 generate-bunny.swift 的 BodyPart）：
+    // 垂在身後的頭髮、衣服和手腳、尾巴、耳朵、後腦頭髮、臉、前面的頭髮、耳環、五官、舉高的手。
+    // items 是身上的物件（部位 id → 物件 id），只用到 bodySlots 的那幾個。
+    // 素材沒有外觀圖層的話，就只有一張完整的 body 圖；舊版外觀素材是 behind / base / head / top 四層。
+    func bodyLayers(_ look: Look, items: [String: String], _ action: PetAction, _ frame: Int) -> [NSImage?] {
         guard manifest.looks != nil else { return [bodyFrame(action, frame)] }
+        guard manifest.bodySlots != nil else {
+            return [
+                lookFrame("looks/hair/\(look.hair)/behind", action, frame),
+                lookFrame("looks/clothes/\(look.clothes)/base", action, frame),
+                lookFrame("looks/hair/\(look.hair)/head", action, frame),
+                lookFrame("looks/clothes/\(look.clothes)/top", action, frame),
+            ]
+        }
+        func item(_ slot: String) -> NSImage? {
+            items[slot].flatMap { itemFrame($0, look, action, frame) }
+        }
         return [
             lookFrame("looks/hair/\(look.hair)/behind", action, frame),
             lookFrame("looks/clothes/\(look.clothes)/base", action, frame),
-            lookFrame("looks/hair/\(look.hair)/head", action, frame),
+            item("tail"),
+            item("ears"),
+            lookFrame("looks/hair/\(look.hair)/back", action, frame),
+            lookFrame("face", action, frame),
+            lookFrame("looks/hair/\(look.hair)/front", action, frame),
+            item("earrings"),
+            lookFrame("features", action, frame),
             lookFrame("looks/clothes/\(look.clothes)/top", action, frame),
         ]
+    }
+
+    // 畫在本體圖層之間的物件（兔耳…）。用髮色畫的物件依目前髮型挑圖。
+    func itemFrame(_ id: String, _ look: Look, _ action: PetAction, _ frame: Int) -> NSImage? {
+        let colorFromHair = manifest.outfits.first { $0.id == id }?.colorFromHair == true
+        return lookFrame(colorFromHair ? "items/\(id)/\(look.hair)" : "items/\(id)", action, frame)
+    }
+
+    // 衣櫃顯示的名字：原本屬於某個角色的物件加上「（角色名）」。
+    func displayName(_ outfit: Manifest.Outfit) -> String {
+        guard let origin = outfit.origin else { return outfit.name }
+        let owner = manifest.characterNames?[origin] ?? Character.all.first { $0.id == origin }?.name ?? origin
+        return "\(outfit.name)（\(owner)）"
     }
 
     // 預設外觀（manifest 裡各自的第一個）。
@@ -128,9 +172,11 @@ final class SpriteLibrary {
         manifest.backFrames?[action.rawValue]?.contains(frame) ?? false
     }
 
-    // 這件服裝這一格要不要疊在本體下面（翅膀在正面時是在身後的）。
+    // 這件服裝這一格要不要疊在本體下面（翅膀在正面時是在身後的；撐傘時傘柄在頭後面）。
     func isBehind(_ outfitID: String, _ action: PetAction, _ frame: Int) -> Bool {
-        manifest.outfits.first { $0.id == outfitID }?.behind == true && !isBackView(action, frame)
+        guard let outfit = manifest.outfits.first(where: { $0.id == outfitID }) else { return false }
+        return (outfit.behind == true && !isBackView(action, frame))
+            || outfit.behindActions?.contains(action.rawValue) == true
     }
 
     private func lookFrame(_ folder: String, _ action: PetAction, _ frame: Int) -> NSImage? {

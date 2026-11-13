@@ -87,9 +87,30 @@
       14
     ]
   },
+  "bodySlots" : [
+    {
+      "id" : "ears",
+      "name" : "耳朵"
+    },
+    {
+      "id" : "tail",
+      "name" : "尾巴"
+    },
+    {
+      "id" : "earrings",
+      "name" : "耳飾"
+    }
+  ],
   "canvas" : {
     "height" : 112,
     "width" : 112
+  },
+  "characterNames" : {
+    "amiya" : "阿米婭",
+    "rim" : "理芽"
+  },
+  "defaultItems" : {
+    "earrings" : "diamond_earrings"
   },
   "looks" : {
     "clothes" : [
@@ -153,6 +174,9 @@
   "outfits" : [
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : false,
       "id" : "cap",
       "name" : "棒球帽",
@@ -161,6 +185,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : false,
       "id" : "party_hat",
       "name" : "派對帽",
@@ -169,6 +196,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : false,
       "id" : "glasses",
       "name" : "圓框眼鏡",
@@ -177,6 +207,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : false,
       "id" : "sunglasses",
       "name" : "墨鏡",
@@ -185,6 +218,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : false,
       "id" : "scarf",
       "name" : "圍巾",
@@ -193,6 +229,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : false,
       "id" : "bowtie",
       "name" : "領結",
@@ -201,6 +240,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "straw_hat",
       "name" : "草帽",
@@ -209,6 +251,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "witch_hat",
       "name" : "魔法帽",
@@ -217,6 +262,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "cape",
       "name" : "披風",
@@ -225,6 +273,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "crown",
       "name" : "王冠",
@@ -233,6 +284,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "ribbon",
       "name" : "蝴蝶結",
@@ -241,6 +295,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : false,
       "id" : "flower_crown",
       "name" : "花冠",
@@ -249,6 +306,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : false,
       "id" : "headphones",
       "name" : "耳機",
@@ -257,6 +317,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "goggles",
       "name" : "飛行護目鏡",
@@ -265,6 +328,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : false,
       "id" : "heart_glasses",
       "name" : "愛心眼鏡",
@@ -273,6 +339,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "bell_collar",
       "name" : "鈴鐺項圈",
@@ -281,6 +350,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "balloon",
       "name" : "氣球",
@@ -289,6 +361,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : false,
       "id" : "lollipop",
       "name" : "棒棒糖",
@@ -297,6 +372,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+        "parasol"
+      ],
       "dungeon" : false,
       "id" : "umbrella",
       "name" : "哥德雨傘",
@@ -305,6 +383,9 @@
     },
     {
       "behind" : false,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "backpack",
       "name" : "小書包",
@@ -313,6 +394,9 @@
     },
     {
       "behind" : true,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "wings",
       "name" : "天使翅膀",
@@ -321,11 +405,44 @@
     },
     {
       "behind" : true,
+      "behindActions" : [
+
+      ],
       "dungeon" : true,
       "id" : "vip_wings",
       "name" : "VIP 星耀之翼",
       "power" : 20,
       "slot" : "back"
+    },
+    {
+      "behind" : false,
+      "colorFromHair" : true,
+      "dungeon" : false,
+      "id" : "bunny_tail",
+      "name" : "兔尾巴",
+      "origin" : "amiya",
+      "power" : 0,
+      "slot" : "tail"
+    },
+    {
+      "behind" : false,
+      "colorFromHair" : true,
+      "dungeon" : false,
+      "id" : "bunny_ears",
+      "name" : "兔耳",
+      "origin" : "amiya",
+      "power" : 0,
+      "slot" : "ears"
+    },
+    {
+      "behind" : false,
+      "colorFromHair" : false,
+      "dungeon" : false,
+      "id" : "diamond_earrings",
+      "name" : "菱形耳環",
+      "origin" : "rim",
+      "power" : 0,
+      "slot" : "earrings"
     }
   ],
   "sheet" : {

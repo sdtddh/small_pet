@@ -46,7 +46,7 @@ final class PetView: NSView {
         layer?.addSublayer(spriteRoot)
 
         // 本體在最下面，服裝依 manifest 的 slots 順序往上疊。
-        for _ in 0..<4 {
+        for _ in 0..<sprites.bodyLayerCount {
             let l = CALayer()
             setupImageLayer(l)
             bodyLayers.append(l)
@@ -91,7 +91,7 @@ final class PetView: NSView {
     private func refreshImages() {
         guard let action = shownAction else { return }
         withoutAnimation {
-            let images = sprites.bodyLayers(look, action, shownFrame)
+            let images = sprites.bodyLayers(look, items: outfits, action, shownFrame)
             for (i, layer) in bodyLayers.enumerated() {
                 layer.contents = i < images.count ? images[i] : nil
             }

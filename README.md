@@ -120,15 +120,21 @@ Resources/
   characters/<角色>/
     manifest.json                    角色名稱、動作格數、播放速度、部位、服裝清單、sprite sheet 的切法
     phrases.json                     這個角色的台詞
-    outfits/<服裝id>.png              跟角色輪廓有關的服裝（雨傘、翅膀）
-    looks/hair/<髮型id>/head.png      外觀：頭（兔耳、臉、頭髮）
-    looks/hair/original/behind.png    角色原本的髮型
-    looks/clothes/original/{base,top}.png  角色原本的衣服
+    face.png                         角色的臉（皮膚）
+    features.png                     角色的五官：臉頰、眼睛、嘴巴
+    outfits/vip_wings.png            跟角色輪廓有關的服裝
+    looks/hair/original/{behind,back,front}.png  角色原本的髮型
+    looks/clothes/original/{base,top}.png        角色原本的衣服
+    items/<物件id>/original.png       用原本髮色畫的兔耳、兔尾巴
   shared/                            所有角色共用一份（App 在角色資料夾找不到某一層時來這裡找）
     outfits/<服裝id>.png              服裝疊圖
     looks/hair/<髮型id>/behind.png    外觀：垂在身後的頭髮
+    looks/hair/<髮型id>/back.png      外觀：臉後面的頭髮（背對時是整顆後腦勺）
+    looks/hair/<髮型id>/front.png     外觀：臉前面的頭髮（兩側髮束、瀏海）
     looks/clothes/<衣服id>/base.png   外觀：腳、垂下的手、衣服
     looks/clothes/<衣服id>/top.png    外觀：舉高的手、胡蘿蔔、睡覺的 z
+    items/<物件id>/<髮型id>.png       角色特徵物件（兔耳、兔尾巴用髮色畫，每種髮型一張）
+    items/<物件id>.png                不跟髮色的物件（菱形耳環）
   props/                             家具、飛機、降落傘（所有角色共用）
 ```
 
@@ -141,7 +147,9 @@ Resources/
 
 例如 `walk` 的第 2 格是第 4 + 2 = 6 格：第 0 列、第 6 欄。
 
-有 `looks/` 的話，App 用這四層（由下往上）疊出她本人，所以產生器不再輸出 `body.png`；沒有的話（例如小貓素材）照舊用 `body`。
+有 `looks/` 的話，App 用這十層（由下往上）疊出她本人：身後的頭髮、衣服、尾巴、耳朵、後腦頭髮、臉、前面的頭髮、耳環、五官、舉高的手。
+耳朵、尾巴、耳飾是可以穿脫的物件（manifest 的 `bodySlots`），原本屬於某個角色的物件在衣櫃顯示成「兔耳（阿米婭）」，任何角色都能戴；
+角色原本戴的（`defaultItems`）在第一次開啟或從舊版升級時自動穿上。所以產生器不再輸出 `body.png`；沒有的話（例如小貓素材）照舊用 `body`。
 哪些圖層放 `shared/` 由產生器的 `isShared` 決定：會挖掉她身體輪廓的服裝、`original` 髮型 / 衣服、含臉的 `head` 層都跟角色有關，其他共用。
 manifest 沒有 `sheet` 的舊素材，還是讀一格一張的 `body/<動作>_<格>.png`（支援 `.png` 和 `.pdf`）。
 

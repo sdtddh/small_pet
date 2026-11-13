@@ -11,6 +11,10 @@ final class Wardrobe: ObservableObject {
     // 每個角色各自記住穿什麼；第一個角色沿用舊的 key。
     private static let defaultsKey = Character.isOriginal ? "equippedOutfits" : "equippedOutfits.\(Character.current)"
     private static let lookKey = Character.isOriginal ? "look" : "look.\(Character.current)"
+    // 衣櫃存檔的版本。沒有這個 key = 第 1 版（1.3.0 以前）。
+    // 改了存檔內容要轉換時：把 currentVersion 加 1，在 migrate 裡加一段「從上一版升到這一版」。
+    private static let versionKey = "wardrobeVersion.\(Character.current)"
+    private static let currentVersion = 2
 
     // 部位 id → 服裝 id。
     @Published private(set) var equipped: [String: String]
@@ -31,13 +35,32 @@ final class Wardrobe: ObservableObject {
         // 過濾掉已經不存在的服裝（例如素材被刪掉了）。
         // 也過濾掉還沒從地下城拿到的服裝。
         let valid = Set(sprites.manifest.outfits.filter { $0.dungeon != true || stats.owns($0.id) }.map(\.id))
-        equipped = saved.filter { valid.contains($0.value) }
+        var equipped = saved.filter { valid.contains($0.value) }
+        Self.migrate(&equipped, manifest: sprites.manifest, valid: valid)
+        self.equipped = equipped
 
         var look = sprites.defaultLook
         let savedLook = UserDefaults.standard.dictionary(forKey: Self.lookKey) as? [String: String] ?? [:]
         if let h = savedLook["hair"], sprites.manifest.looks?.hair.contains(where: { $0.id == h }) == true { look.hair = h }
         if let c = savedLook["clothes"], sprites.manifest.looks?.clothes.contains(where: { $0.id == c }) == true { look.clothes = c }
         self.look = look
+    }
+
+    // 把舊版存檔一版一版升到 currentVersion，升完存回去。
+    private static func migrate(_ equipped: inout [String: String], manifest: Manifest, valid: Set<String>) {
+        let d = UserDefaults.standard
+        var version = max(d.integer(forKey: versionKey), 1)   // 沒存過是 0，當作第 1 版
+        guard version < currentVersion else { return }
+        if version == 1 {
+            // 第 2 版：兔耳、兔尾巴、耳環變成可以穿脫的物件。舊存檔（和第一次開啟）穿上角色原本的樣子；
+            // 之後玩家脫掉就不會再被穿回去，因為版本已經是 2 了。
+            for (slot, id) in manifest.defaultItems ?? [:] where equipped[slot] == nil && valid.contains(id) {
+                equipped[slot] = id
+            }
+            version = 2
+        }
+        d.set(equipped, forKey: defaultsKey)
+        d.set(version, forKey: versionKey)
     }
 
     func setHair(_ id: String) { setLook(Look(hair: id, clothes: look.clothes)) }
@@ -122,6 +145,10 @@ struct WardrobeView: View {
                         lookRow("衣服", looks.clothes, selected: wardrobe.look.clothes) { id in
                             var l = wardrobe.look; l.clothes = id; return l
                         } choose: { wardrobe.setClothes($0) }
+                        // 耳朵、尾巴、耳飾：原本屬於某個角色的特徵，誰都能戴
+                        ForEach(sprites.manifest.bodySlots ?? []) { slot in
+                            slotRow(slot)
+                        }
                         Divider()
                         Text("配件").font(.caption).foregroundStyle(.secondary)
                     }
@@ -188,7 +215,8 @@ struct WardrobeView: View {
             optionGrid {
                 option(name: "無", outfitID: nil, slot: slot.id)
                 ForEach(wardrobe.available(in: slot.id)) { outfit in
-                    option(name: outfit.power.map { $0 > 0 ? "\(outfit.name) +\($0)" : outfit.name } ?? outfit.name,
+                    let name = sprites.displayName(outfit)
+                    option(name: outfit.power.map { $0 > 0 ? "\(name) +\($0)" : name } ?? name,
                            outfitID: outfit.id, slot: slot.id)
                 }
             }
@@ -224,7 +252,7 @@ struct PetPreview: View {
         let behind = worn.filter { sprites.isBehind($0, .idle, 0) }
         let front = worn.filter { !sprites.isBehind($0, .idle, 0) }
         return behind.compactMap { sprites.outfitFrame($0, .idle, 0) }
-            + sprites.bodyLayers(look, .idle, 0).compactMap { $0 }
+            + sprites.bodyLayers(look, items: outfits, .idle, 0).compactMap { $0 }
             + front.compactMap { sprites.outfitFrame($0, .idle, 0) }
     }
 
