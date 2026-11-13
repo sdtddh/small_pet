@@ -1,6 +1,6 @@
 # SmallPet 🐾
 
-一隻用 **Swift + AppKit** 寫的 macOS 桌面寵物，主角是《明日方舟 Arknights》的 **阿米婭 Amiya**，也可以切換成《神椿市協奏中》的 **カフ**（都是 Q 版同人）。她會自己走路、跑步、跳躍、坐下、睡覺，可以抓起來甩出去，還能換裝。
+一隻用 **Swift + AppKit** 寫的 macOS 桌面寵物，主角是《明日方舟 Arknights》的 **阿米婭 Amiya**，也可以切換成《神椿市協奏中》的 **理芽**（都是 Q 版同人）。她會自己走路、跑步、跳躍、坐下、睡覺，可以抓起來甩出去，還能換裝。
 
 ## 需要什麼
 
@@ -31,7 +31,7 @@ swift run
 - **雙擊**：跳一下
 - **右鍵** 或 **選單列的 🐾 圖示**：
   - 動作 ▸ 發呆 / 走路 / 跑步 / 跳躍 / 坐下 / 睡覺 / 跳舞
-  - 角色 ▸ 阿米婭 / カフ：切換時 App 會自動重開一下。每個角色的等級、背包、地下城戰利品、身上的衣服和台詞都是分開的；家具共用
+  - 角色 ▸ 阿米婭 / 理芽：切換時 App 會自動重開一下。每個角色的等級、背包、地下城戰利品、身上的衣服和台詞都是分開的；家具共用
   - 自動行動：打勾時她會自己隨機換動作（偏安靜，常常跑去螢幕角落坐一兩分鐘；電腦桌、鞦韆、飛機有擺出來的話也會自己過去）；取消後會一直做你選的動作
   - 說句話：讓她隨便說一句
   - 餵食：每天 2 次，餐桌擺上胡蘿蔔，她自己走過去坐下來吃，吃完拿到 XP（見下方「練等」）
@@ -98,7 +98,7 @@ Xcode 會把這個 Swift Package 當專案打開，按左上角 ▶︎ 就能跑
 | `Sources/SmallPet/StatusWindow.swift` | 狀態視窗（SwiftUI）：狀態 / 地下城 / 背包三頁 |
 | `Sources/SmallPet/Wardrobe.swift` | 換裝狀態與衣櫃視窗（SwiftUI） |
 | `Sources/SmallPet/PetWindow.swift` | 透明、無邊框、置頂的視窗 |
-| `Tools/generate-bunny.swift` | 產生角色的 Q 版向量素材（`amiya` / `kaf`）與家具 |
+| `Tools/generate-bunny.swift` | 產生角色的 Q 版向量素材（`amiya` / `rim`）與家具 |
 
 ## 換外觀 / 加衣服
 
@@ -127,13 +127,13 @@ Resources/
 
 **換掉整隻寵物**：直接用自己的圖覆蓋 `characters/<角色>/body/` 底下的檔案即可。
 
-**新增角色**：在 `generate-bunny.swift` 的 `characterNames` 和 `Character.swift` 的 `Character.all` 各加一筆，畫出她的特徵（參考 `kaf` 的寫法），再放一份 `phrases.json`。
+**新增角色**：在 `generate-bunny.swift` 的 `characterNames` 和 `Character.swift` 的 `Character.all` 各加一筆，畫出她的特徵（參考 `rim` 的寫法），再放一份 `phrases.json`。
 
 **重新產生素材**（會覆蓋該角色的 `body/`、`outfits/`、`manifest.json`，以及共用的 `props/`；不會動到台詞）：
 
 ```bash
 swift Tools/generate-bunny.swift        # 阿米婭
-swift Tools/generate-bunny.swift kaf    # カフ
+swift Tools/generate-bunny.swift rim    # 理芽
 ```
 
 （`Tools/generate-sprites.swift` 是最早的小貓版，已經不支援角色資料夾，只留著參考。）
@@ -184,7 +184,7 @@ swift Tools/generate-bunny.swift kaf    # カフ
 - 戰利品服裝的戰鬥力：草帽 +5、氣球 +1、鈴鐺項圈 +2、魔法帽 +9、披風 +8、護目鏡 +4、小書包 +3、王冠 +14、蝴蝶結 +11、天使翅膀 +6、VIP 星耀之翼 +20。拿到之後才會出現在衣櫃。
 - 測試時不想等：用 `SMALLPET_FAST=1 swift run` 啟動，分鐘會變成秒。
 - 地下城清單在 `Dungeon.swift`。
-- 進度存在 `~/Library/Application Support/SmallPet/save.json`（カフ是 `save-kaf.json`），想重來就刪掉對應的檔案。
+- 進度存在 `~/Library/Application Support/SmallPet/save.json`（理芽是 `save-rim.json`），想重來就刪掉對應的檔案。
 
 ## 之後可以練習加什麼
 
@@ -194,4 +194,4 @@ swift Tools/generate-bunny.swift kaf    # カフ
 
 ## 聲明
 
-阿米婭（Amiya）及《明日方舟》相關角色版權屬於 Hypergryph / Yostar；カフ及《神椿市協奏中》相關角色版權屬於 KAMITSUBAKI STUDIO / KTB。本專案為非商業的粉絲同人作品，所有素材皆由程式自行繪製，不包含官方圖片。
+阿米婭（Amiya）及《明日方舟》相關角色版權屬於 Hypergryph / Yostar；理芽及《神椿市協奏中》相關角色版權屬於 KAMITSUBAKI STUDIO / KTB。本專案為非商業的粉絲同人作品，所有素材皆由程式自行繪製，不包含官方圖片。

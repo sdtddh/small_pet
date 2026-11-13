@@ -2,7 +2,7 @@
 //
 // 用法（在專案根目錄）：
 //     swift Tools/generate-bunny.swift            # 阿米婭（預設）
-//     swift Tools/generate-bunny.swift kaf        # カフ
+//     swift Tools/generate-bunny.swift rim        # 理芽
 //
 // 角色的本體、服裝、manifest.json 寫到 Sources/SmallPet/Resources/characters/<角色>/，
 // 家具等道具圖寫到 Resources/props/（所有角色共用）。
@@ -22,12 +22,12 @@ let ground: CGFloat = 4          // 腳底的 y 座標
 let pivot = CGPoint(x: 48, y: ground)   // 壓扁 / 前傾的支點（腳底中央）
 
 // 第一個參數是角色 id，第二個（可省略）是 Resources 資料夾。
-let characterNames = ["amiya": "阿米婭", "kaf": "カフ"]
+let characterNames = ["amiya": "阿米婭", "rim": "理芽"]
 let character = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "amiya"
 guard let characterName = characterNames[character] else {
     fatalError("不認識的角色 \(character)，可用：\(characterNames.keys.sorted())")
 }
-let kaf = character == "kaf"
+let rim = character == "rim"
 let resourcesRoot = URL(fileURLWithPath: CommandLine.arguments.count > 2
     ? CommandLine.arguments[2]
     : "Sources/SmallPet/Resources")
@@ -42,23 +42,23 @@ func hex(_ v: UInt32, _ a: CGFloat = 1) -> CGColor {
 }
 
 let outline = hex(0x2B2230)
-// カフ：藍色鮑伯頭、橘色帽兜內裡、紅色線條、橘紅裙、藍鞋。
-let hair = kaf ? hex(0x2336D6) : hex(0x8A5A3C)
-let hairDark = kaf ? hex(0x1A259C) : hex(0x6E452E)
-let hairShine = kaf ? hex(0x9DB2FF) : hex(0xCDEBF7)
+// 理芽：藍色鮑伯頭、橘色帽兜內裡、紅色線條、橘紅裙、藍鞋。
+let hair = rim ? hex(0x2336D6) : hex(0x8A5A3C)
+let hairDark = rim ? hex(0x1A259C) : hex(0x6E452E)
+let hairShine = rim ? hex(0x9DB2FF) : hex(0xCDEBF7)
 let earInner = hex(0xE9C6B4)
 let skin = hex(0xFFEBDF)
 let cheek = hex(0xF7A1A8, 0.6)
-let eyeDark = kaf ? hex(0x1B2268) : hex(0x1F3F66)
-let eyeIris = kaf ? hex(0x4C6BF0) : hex(0x46C1DE)
+let eyeDark = rim ? hex(0x1B2268) : hex(0x1F3F66)
+let eyeIris = rim ? hex(0x4C6BF0) : hex(0x46C1DE)
 let jacket = hex(0x2A2A33)
-let trim = kaf ? hex(0xF29A2E) : hex(0x5CD0E0)        // 帽兜內裡
-let jacketLine = kaf ? hex(0xD8433A) : trim             // 外套線條、袖口
-let top = kaf ? hex(0x2B2348) : hex(0x34304A)
-let skirt = kaf ? hex(0xE8542A) : hex(0x3F7EC0)
-let skirtLight = kaf ? hex(0xF27A4A) : hex(0x6FA6DC)
+let trim = rim ? hex(0xF29A2E) : hex(0x5CD0E0)        // 帽兜內裡
+let jacketLine = rim ? hex(0xD8433A) : trim             // 外套線條、袖口
+let top = rim ? hex(0x2B2348) : hex(0x34304A)
+let skirt = rim ? hex(0xE8542A) : hex(0x3F7EC0)
+let skirtLight = rim ? hex(0xF27A4A) : hex(0x6FA6DC)
 let legging = hex(0x24242C)
-let shoe = kaf ? hex(0x3446C8) : hex(0x17171D)
+let shoe = rim ? hex(0x3446C8) : hex(0x17171D)
 let gemRed = hex(0xE0383A)
 let gemGreen = hex(0x2FB36A)
 let white = hex(0xFFFFFF)
@@ -228,7 +228,7 @@ func drawBody(_ ctx: CGContext, _ p: Pose) {
             line(ctx, segment(a, b), skirtLight, width: 1.6)
         }
 
-        if kaf {
+        if rim {
             // 深紫內搭，胸前紅白菱形
             shape(ctx, rounded(44, 24, 14, 14, 3), top, lineWidth: 1.6)
             shape(ctx, polygon([CGPoint(x: 51, y: 35), CGPoint(x: 54.5, y: 30), CGPoint(x: 51, y: 25), CGPoint(x: 47.5, y: 30)]),
@@ -248,7 +248,7 @@ func drawBody(_ ctx: CGContext, _ p: Pose) {
         shape(ctx, rounded(55.5, 17, 10, 21, 5), jacket)
         line(ctx, segment(CGPoint(x: 45.5, y: 18.5), CGPoint(x: 45.5, y: 36)), jacketLine, width: 2)
         line(ctx, segment(CGPoint(x: 56.5, y: 18.5), CGPoint(x: 56.5, y: 36)), jacketLine, width: 2)
-        if kaf {   // 外套上的紅色折線
+        if rim {   // 外套上的紅色折線
             for (a, b, c) in [(CGPoint(x: 36, y: 30), CGPoint(x: 40, y: 26), CGPoint(x: 43, y: 29)),
                               (CGPoint(x: 58, y: 29), CGPoint(x: 61, y: 26), CGPoint(x: 64, y: 30))] {
                 let z = CGMutablePath(); z.move(to: a); z.addLine(to: b); z.addLine(to: c)
@@ -314,7 +314,7 @@ func drawBodyBack(_ ctx: CGContext, _ p: Pose) {
         lining.addQuadCurve(to: CGPoint(x: 60, y: 32), control: CGPoint(x: 50, y: 26))
         line(ctx, lining, trim, width: 2)
 
-        if !kaf {
+        if !rim {
             // 圓圓的兔尾巴
             shape(ctx, ellipse(50 + p.tail, 20, 10, 9), hair)
             shape(ctx, ellipse(48.5 + p.tail, 21.5, 3.5, 2.5), hairShine, stroke: false)
@@ -324,7 +324,7 @@ func drawBodyBack(_ ctx: CGContext, _ p: Pose) {
     withState(ctx, head(p)) {
         // 兔耳背面：沒有粉色內側
         for (root, base, k) in [(CGPoint(x: 40, y: 72), CGFloat(0.3), CGFloat(1)),
-                                (CGPoint(x: 60, y: 72), CGFloat(-0.3), CGFloat(1))] where !kaf {
+                                (CGPoint(x: 60, y: 72), CGFloat(-0.3), CGFloat(1))] where !rim {
             withState(ctx, { c in
                 c.translateBy(x: root.x, y: root.y)
                 c.rotate(by: base + p.ears * k)
@@ -352,7 +352,7 @@ func drawBodyBack(_ ctx: CGContext, _ p: Pose) {
             shape(ctx, ellipse(0, 0, 14, 5), hairShine, stroke: false)
         }
         shape(ctx, ellipse(58, 75, 6, 2.6), hairShine, stroke: false)
-        if kaf {   // 背面：辮子在左側（背對時換邊）
+        if rim {   // 背面：辮子在左側（背對時換邊）
             drawBraid(ctx, top: CGPoint(x: 30, y: 58), bottom: CGPoint(x: 31, y: 44), sway: p.ears)
         }
     }
@@ -425,7 +425,7 @@ func drawArm(_ ctx: CGContext, _ s: CGPoint, _ angle: CGFloat) {
 func drawHead(_ ctx: CGContext, _ p: Pose) {
     // 兔耳（先畫，讓頭髮蓋住耳根）
     for (root, base, k) in [(CGPoint(x: 40, y: 72), CGFloat(0.3), CGFloat(1)),
-                            (CGPoint(x: 60, y: 74), CGFloat(-0.18), CGFloat(0.8))] where !kaf {
+                            (CGPoint(x: 60, y: 74), CGFloat(-0.18), CGFloat(0.8))] where !rim {
         withState(ctx, { c in
             c.translateBy(x: root.x, y: root.y)
             c.rotate(by: base + p.ears * k)
@@ -443,7 +443,7 @@ func drawHead(_ ctx: CGContext, _ p: Pose) {
 
     // 兩側垂下的髮束
     shape(ctx, petal(CGPoint(x: 31, y: 62), CGPoint(x: 31, y: 37), width: 7), hair, lineWidth: 1.8)
-    if kaf {
+    if rim {
         // 臉旁邊的辮子 + 菱形耳環
         drawEarring(ctx, at: CGPoint(x: 34.5, y: 38))
         drawBraid(ctx, top: CGPoint(x: 75, y: 58), bottom: CGPoint(x: 76, y: 44), sway: p.ears)
@@ -486,8 +486,8 @@ func drawHead(_ ctx: CGContext, _ p: Pose) {
     ctx.setLineCap(.round)
     if p.mouthOpen {
         shape(ctx, ellipse(54.5, 42, 5, 4.5), hex(0xC8504F), lineWidth: 1.5)
-    } else if kaf {
-        // カフ：小小的微笑
+    } else if rim {
+        // 理芽：小小的微笑
         let mouth = CGMutablePath()
         mouth.move(to: CGPoint(x: 52, y: 43.5))
         mouth.addQuadCurve(to: CGPoint(x: 57, y: 43.5), control: CGPoint(x: 54.5, y: 41))
@@ -501,7 +501,7 @@ func drawHead(_ ctx: CGContext, _ p: Pose) {
     }
 }
 
-// カフ的辮子：一節一節的小橢圓，尾端綁一小撮。sway 讓它跟著動作微微擺。
+// 理芽的辮子：一節一節的小橢圓，尾端綁一小撮。sway 讓它跟著動作微微擺。
 func drawBraid(_ ctx: CGContext, top: CGPoint, bottom: CGPoint, sway: CGFloat) {
     let n = 4
     let end = CGPoint(x: bottom.x - sway * 3, y: bottom.y)
@@ -522,8 +522,8 @@ func drawEarring(_ ctx: CGContext, at c: CGPoint) {
                         CGPoint(x: c.x - 1.2, y: c.y)]), gemGreen, stroke: false)
 }
 
-// カフ的眼睛：深靛藍虹膜、裡面一圈紅色細環、黃色水滴形瞳孔光點，上眼線粗、眼尾往外勾。
-func drawKafEye(_ ctx: CGContext, _ c: CGPoint, wide: Bool) {
+// 理芽的眼睛：深靛藍虹膜、裡面一圈紅色細環、黃色水滴形瞳孔光點，上眼線粗、眼尾往外勾。
+func drawRimEye(_ ctx: CGContext, _ c: CGPoint, wide: Bool) {
     ctx.setLineCap(.round)
     let w: CGFloat = wide ? 9.5 : 8.5, h: CGFloat = wide ? 11.5 : 10
     let eye = ellipse(c.x, c.y - 0.5, w, h)
@@ -561,7 +561,7 @@ func drawKafEye(_ ctx: CGContext, _ c: CGPoint, wide: Bool) {
 
 func drawEye(_ ctx: CGContext, _ c: CGPoint, _ eyes: Eyes) {
     ctx.setLineCap(.round)
-    if kaf && (eyes == .open || eyes == .wide) { return drawKafEye(ctx, c, wide: eyes == .wide) }
+    if rim && (eyes == .open || eyes == .wide) { return drawRimEye(ctx, c, wide: eyes == .wide) }
     switch eyes {
     case .open:
         let eye = ellipse(c.x, c.y, 8.5, 11)

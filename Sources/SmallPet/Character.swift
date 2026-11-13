@@ -9,16 +9,34 @@ enum Character {
     // 選單上的順序。id 要跟資料夾名稱一樣。
     static let all: [(id: String, name: String)] = [
         ("amiya", "阿米婭"),
-        ("kaf", "カフ"),
+        ("rim", "理芽"),
     ]
 
     private static let defaultsKey = "character"
 
     // 目前的角色（存在 UserDefaults，不認識的 id 就退回第一個）。
     static let current: String = {
+        migrateRenamed()
         let saved = UserDefaults.standard.string(forKey: defaultsKey) ?? ""
         return all.contains { $0.id == saved } ? saved : all[0].id
     }()
+
+    // v1.2.0 的「カフ」(id kaf) 後來改名成「理芽」(id rim)：把選擇、存檔、衣櫃搬過去。
+    private static func migrateRenamed() {
+        let d = UserDefaults.standard
+        let (old, new) = ("kaf", "rim")
+        if d.string(forKey: defaultsKey) == old { d.set(new, forKey: defaultsKey) }
+        if let outfits = d.dictionary(forKey: "equippedOutfits.\(old)") {
+            if d.dictionary(forKey: "equippedOutfits.\(new)") == nil { d.set(outfits, forKey: "equippedOutfits.\(new)") }
+            d.removeObject(forKey: "equippedOutfits.\(old)")
+        }
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SmallPet", isDirectory: true)
+        let from = dir.appendingPathComponent("save-\(old).json"), to = dir.appendingPathComponent("save-\(new).json")
+        if FileManager.default.fileExists(atPath: from.path), !FileManager.default.fileExists(atPath: to.path) {
+            try? FileManager.default.moveItem(at: from, to: to)
+        }
+    }
 
     // 阿米婭是原本就有的角色，沿用舊的存檔名稱，升級後進度不會不見。
     static var isOriginal: Bool { current == all[0].id }
