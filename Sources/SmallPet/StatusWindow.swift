@@ -34,13 +34,25 @@ final class StatusWindowController {
             w.center()
             window = w
         }
-        // 跟衣櫃一樣，.accessory App 要主動把視窗叫到前面。
-        if #available(macOS 14, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
+        window?.bringToFront()
+    }
+}
+
+extension NSWindow {
+    // 我們是 .accessory App（沒有 Dock 圖示），要主動把視窗叫到前面。
+    // macOS 14 起 NSApp.activate() 是「禮讓式」的：別的 App 在前面時可能被拒絕，
+    // 視窗就只會開在別人後面，看起來像沒跳出來。orderFrontRegardless 不管有沒有被啟用都會蓋到最上面。
+    // 從右鍵選單呼叫時選單還沒收完，所以等下一輪再做。
+    func bringToFront() {
+        DispatchQueue.main.async { [self] in
+            if #available(macOS 14, *) {
+                NSApp.activate()
+            } else {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            makeKeyAndOrderFront(nil)
+            orderFrontRegardless()
         }
-        window?.makeKeyAndOrderFront(nil)
     }
 }
 
