@@ -5,6 +5,11 @@
       "frames" : 6,
       "loop" : true
     },
+    "bed" : {
+      "fps" : 1.2,
+      "frames" : 2,
+      "loop" : true
+    },
     "dance" : {
       "fps" : 8,
       "frames" : 16,
@@ -60,11 +65,6 @@
       "frames" : 2,
       "loop" : true
     },
-    "swing" : {
-      "fps" : 1.6666666666666667,
-      "frames" : 4,
-      "loop" : true
-    },
     "typing" : {
       "fps" : 6,
       "frames" : 4,
@@ -95,19 +95,19 @@
     "cell" : 224,
     "columns" : 8,
     "start" : {
-      "attack" : 62,
+      "attack" : 60,
+      "bed" : 56,
       "dance" : 28,
       "dragged" : 26,
       "eat" : 48,
       "fall" : 24,
-      "fly" : 60,
+      "fly" : 58,
       "idle" : 0,
       "jump" : 16,
       "parachute" : 44,
       "run" : 10,
       "sit" : 20,
       "sleep" : 22,
-      "swing" : 56,
       "typing" : 52,
       "walk" : 4
     }

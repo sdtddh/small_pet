@@ -152,6 +152,15 @@
     {
       "anchor" : "head",
       "behind" : false,
+      "dungeon" : false,
+      "id" : "mokke",
+      "name" : "Mokke",
+      "power" : 3,
+      "slot" : "head"
+    },
+    {
+      "anchor" : "head",
+      "behind" : false,
       "dungeon" : true,
       "id" : "straw_hat",
       "name" : "草帽",

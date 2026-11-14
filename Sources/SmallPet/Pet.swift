@@ -23,9 +23,6 @@ final class Pet {
         var parachuteHeight: CGFloat = 0.5  // 往下掉時離地超過螢幕高度的這個比例，就開傘
         var parachuteSpeed: CGFloat = 70    // 開傘後的下降速度：點/秒
         var parachuteDrag: CGFloat = 3      // 開傘後速度收斂的快慢（越大越快變慢）
-        var swingPeriod: Double = 2.4       // 盪鞦韆一來一回幾秒（要跟素材 swing 的 fps 對上）
-        var swingAngle: CGFloat = 0.3       // 盪鞦韆最大擺角（弧度）
-        var swingLength: CGFloat = 113.5    // 繩長：樹枝到座板的距離（點）
         var flySpeed: CGFloat = 200         // 飛機巡航速度：點/秒
         var flyAltitude: CGFloat = 0.45     // 巡航高度：螢幕高度的比例（上下再飄 50 點）
     }
@@ -69,9 +66,6 @@ final class Pet {
     private var walkFacing: CGFloat = 1
     private var afterWalk: (() -> Void)?
 
-    // 盪鞦韆時，靜止的位置（視窗 x）。
-    private var swingCenter: CGFloat = 0
-
     // 開飛機：滑行 → 起飛 → 在天上飄（碰到螢幕邊就掉頭）→ 時間到從左邊進場，降落滑回停機位。
     private enum FlightPhase { case taxi, air, landing(distance: CGFloat, altitude: CGFloat) }
     private var flightPhase = FlightPhase.taxi
@@ -82,7 +76,7 @@ final class Pet {
     var facingLeft: Bool { direction < 0 }
 
     // 自動模式換動作時，有 outingChance 的機率先問 onOuting 要不要去哪裡
-    // （角落坐坐、打電腦、盪鞦韆）；它回 true 代表已經安排好了。
+    // （角落坐坐、打電腦、上床睡覺）；它回 true 代表已經安排好了。
     var onOuting: (() -> Bool)?
     var outingChance = 0.35
 
@@ -188,7 +182,6 @@ final class Pet {
         guard canAct else { return }
         setAction(newAction)
         if let duration { actionDuration = duration }
-        if newAction == .swing { swingCenter = posX }
         if newAction == .fly { beginFlight() }
         isInterlude = true
         afterInterlude = done
@@ -210,7 +203,7 @@ final class Pet {
         }
     }
 
-    // 放下手邊的事（走去家具、打電腦、盪鞦韆）。在鞦韆上的話會掉回地面。
+    // 放下手邊的事（走去家具、打電腦、睡床、開飛機）。在飛機上的話會掉回地面。
     func stopBusy() {
         guard isBusy else { return }
         setAction(.fall)
@@ -273,7 +266,7 @@ final class Pet {
     }
 
     // 每按一次跳一格：你按越快她跳越快，停手 1.5 秒後回去做原本的事。
-    // 睡覺、被抓、在空中、出門、正在忙（走去吃飯、盪鞦韆、開飛機、升等跳舞…）時不打擾她。回傳有沒有跳。
+    // 睡覺、被抓、在空中、出門、正在忙（走去吃飯、上床睡覺、開飛機、升等跳舞…）時不打擾她。回傳有沒有跳。
     @discardableResult
     private func danceStep() -> Bool {
         if action == .dance, syncDancing {
@@ -291,9 +284,9 @@ final class Pet {
         return true
     }
 
-    // 單擊：睡覺中就被叫醒，否則回應一句。
+    // 單擊：睡覺中（包括在床上）就被叫醒，否則回應一句。
     private func clicked() {
-        if action == .sleep, onGround {
+        if action == .sleep || action == .bed, onGround {
             heldAction = .idle
             setAction(.idle)
             speech.say("wake")
@@ -354,8 +347,6 @@ final class Pet {
 
         if isDragging {
             // 位置由 dragMoved 直接決定，這裡什麼都不做。
-        } else if action == .swing {
-            updateSwing()
         } else if action == .fly {
             updateFlight(t: t, visible: visible)
         } else if !onGround {
@@ -450,22 +441,6 @@ final class Pet {
             done?()
         } else if autoMode, actionTime >= actionDuration {
             pickNextAction()
-        }
-    }
-
-    // 盪鞦韆：以 swingCenter 為中心沿著圓弧擺，開頭和結尾各花 2 秒慢慢加大 / 減小，最後停回地面。
-    private func updateSwing() {
-        let ramp = min(1, actionTime / 2, max(0, actionDuration - actionTime) / 2)
-        let angle = tuning.swingAngle * CGFloat(ramp * sin(2 * .pi * actionTime / tuning.swingPeriod))
-        posX = swingCenter + tuning.swingLength * sin(angle)
-        posY = ground + tuning.swingLength * (1 - cos(angle))
-        direction = 1
-        if actionTime >= actionDuration {
-            posX = swingCenter
-            posY = ground
-            let done = afterInterlude
-            finishAirAction()
-            done?()
         }
     }
 

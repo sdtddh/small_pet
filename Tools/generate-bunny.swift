@@ -109,6 +109,7 @@ let white = hex(0xFFFFFF)
 enum Eyes { case open, closed, happy, wide }
 
 struct Pose {
+    var bodyX: CGFloat = 0          // 上半身（身體+頭）整體左右位移（躺在床上時用）
     var bodyY: CGFloat = 0          // 上半身（身體+頭）整體上下位移
     var squashX: CGFloat = 1        // 水平伸縮（>1 變胖）
     var squashY: CGFloat = 1        // 垂直伸縮（<1 壓扁）
@@ -124,6 +125,7 @@ struct Pose {
     var eyes: Eyes = .open
     var mouthOpen = false
     var zzz = 0                     // 睡覺時頭上的 z 數量
+    var zzzX: CGFloat = 74          // z 從哪裡開始冒（躺在床上時頭在左邊）
     var back = false                // 轉過身，背對畫面（跳舞時扭屁股用）
     var tail: CGFloat = 0           // 背面時兔尾巴的左右擺動
     var straps = false              // 抓著降落傘的繩子（繩子一路畫到畫布頂端）
@@ -218,7 +220,7 @@ func withState(_ ctx: CGContext, _ transform: (CGContext) -> Void, _ draw: () ->
 // 做成 CGAffineTransform，腳要接到上半身的髖部時才能算出位置。
 func upperTransform(_ p: Pose) -> CGAffineTransform {
     CGAffineTransform.identity
-        .translatedBy(x: 0, y: p.bodyY)
+        .translatedBy(x: p.bodyX, y: p.bodyY)
         .translatedBy(x: pivot.x, y: pivot.y)
         .rotated(by: -p.lean)
         .scaledBy(x: p.squashX, y: p.squashY)
@@ -342,7 +344,7 @@ func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
 
         // 睡覺的 z
         for i in 0..<p.zzz {
-            drawZ(ctx, at: CGPoint(x: 74 + CGFloat(i) * 8, y: 66 + CGFloat(i) * 10), size: 6 + CGFloat(i) * 2)
+            drawZ(ctx, at: CGPoint(x: p.zzzX + CGFloat(i) * 8, y: 66 + CGFloat(i) * 10), size: 6 + CGFloat(i) * 2)
         }
     }
 }
@@ -819,7 +821,7 @@ let outfitPower: [String: Int] = [
     "cap": 3, "party_hat": 2, "glasses": 2, "sunglasses": 4, "scarf": 3, "bowtie": 2,
     "straw_hat": 5, "witch_hat": 9, "cape": 8, "crown": 14, "ribbon": 11,
     "flower_crown": 3, "headphones": 2, "goggles": 4, "heart_glasses": 2, "bell_collar": 2,
-    "balloon": 1, "lollipop": 2, "sword": 5, "branch": 0, "umbrella": 4, "backpack": 3, "wings": 6, "vip_wings": 20,
+    "mokke": 3, "balloon": 1, "lollipop": 2, "sword": 5, "branch": 0, "umbrella": 4, "backpack": 3, "wings": 6, "vip_wings": 20,
 ]
 // 只能從地下城拿到的服裝（還沒拿到前不會出現在衣櫃）。
 let dungeonOutfits: Set<String> = [
@@ -828,6 +830,55 @@ let dungeonOutfits: Set<String> = [
     "crown", "ribbon", "wings", "sword",                        // 城堡
     "vip_wings",                                    // 星空神殿
 ]
+
+// Mokke：粉紅色、軟綿綿的兔子小怪，整隻趴在頭頂上，兩隻長耳朵往後倒，豆豆眼看前面。
+let mokkePink = hex(0xF48FB4), mokkeShade = hex(0xC8507E)
+func drawMokke(_ ctx: CGContext, back: Bool) {
+    // 身體：下緣順著頭頂的弧度，上面圓圓鼓起來，前端（臉那一側）比較高
+    let body = CGMutablePath()
+    body.move(to: CGPoint(x: 33, y: 71))
+    body.addCurve(to: CGPoint(x: 60, y: 91), control1: CGPoint(x: 31, y: 86), control2: CGPoint(x: 45, y: 92))
+    body.addCurve(to: CGPoint(x: 73, y: 70), control1: CGPoint(x: 72, y: 90), control2: CGPoint(x: 76, y: 78))
+    body.addQuadCurve(to: CGPoint(x: 33, y: 71), control: CGPoint(x: 53, y: 64))
+    body.closeSubpath()
+    // 長耳朵：從身體後上方長出來、往後（畫面左上）倒，尖端圓圓的
+    for (root, angle, len) in [(CGPoint(x: 46, y: 85), CGFloat(0.85), CGFloat(25)), (CGPoint(x: 55, y: 88), CGFloat(0.4), CGFloat(24))] {
+        withState(ctx, { c in
+            c.translateBy(x: root.x, y: root.y)
+            c.rotate(by: angle)
+        }) {
+            let ear = CGMutablePath()
+            ear.move(to: CGPoint(x: -4.5, y: -2))
+            ear.addCurve(to: CGPoint(x: 0, y: len), control1: CGPoint(x: -6.5, y: len * 0.6), control2: CGPoint(x: -5, y: len))
+            ear.addCurve(to: CGPoint(x: 4.5, y: -2), control1: CGPoint(x: 5, y: len), control2: CGPoint(x: 6.5, y: len * 0.6))
+            ear.closeSubpath()
+            shape(ctx, ear, mokkePink, lineWidth: 1.8)
+            // 耳朵背光那一側的陰影
+            clipped(ctx, to: ear) { shape(ctx, ellipse(-4.5, len * 0.5, 6, len * 1.2), mokkeShade, stroke: false) }
+            line(ctx, ear, outline, width: 1.8)
+        }
+    }
+    shape(ctx, body, mokkePink, lineWidth: 2)
+    // 下半身的陰影（原作那種一大塊深桃紅），背對時陰影在另一邊
+    clipped(ctx, to: body) {
+        shape(ctx, ellipse(back ? 68 : 38, 72, 40, 22), mokkeShade, stroke: false)
+        if !back { shape(ctx, ellipse(64, 87, 9, 3), hex(0xFFFFFF, 0.35), stroke: false) }
+    }
+    line(ctx, body, outline, width: 2)
+    // 毛茸茸的短刻痕
+    for (a, b) in [(CGPoint(x: 37, y: 80), CGPoint(x: 39, y: 79)), (CGPoint(x: 38.5, y: 82), CGPoint(x: 40.5, y: 81))] {
+        line(ctx, segment(a, b), outline, width: 1)
+    }
+    guard !back else { return }
+    // 兩隻小手掛在額頭前面
+    for c in [CGPoint(x: 59, y: 70), CGPoint(x: 68, y: 70.5)] {
+        shape(ctx, ellipse(c.x, c.y, 7, 6), mokkePink, lineWidth: 1.6)
+    }
+    // 豆豆眼
+    for c in [CGPoint(x: 57, y: 80.5), CGPoint(x: 67, y: 80)] {
+        shape(ctx, ellipse(c.x, c.y, 2.6, 2.8), outline, stroke: false)
+    }
+}
 
 // 哥德雨傘的顏色。
 let umbrellaBlack = hex(0x1E1A24), umbrellaShade = hex(0x3A2D4A), umbrellaWine = hex(0x9B2242)
@@ -910,6 +961,9 @@ let outfits: [Outfit] = [
             shape(ctx, polygon([c, CGPoint(x: c.x + 9, y: c.y + 5), CGPoint(x: c.x + 9, y: c.y - 5)]), red, lineWidth: 1.8)
             shape(ctx, ellipse(c.x, c.y, 5.5, 5.5), hex(0xB8395A), lineWidth: 1.8)
         }
+    },
+    Outfit(id: "mokke", name: "Mokke", slot: "head") { ctx, p in
+        withState(ctx, head(p)) { drawMokke(ctx, back: p.back) }
     },
 
     // ── 以下是地下城的戰利品 ──
@@ -2016,8 +2070,7 @@ let actions: [ActionSpec] = [
     ActionSpec(name: "parachute", frames: 4, fps: 4, loop: true),
     ActionSpec(name: "eat", frames: 4, fps: 5, loop: true),
     ActionSpec(name: "typing", frames: 4, fps: 6, loop: true),
-    // 一格是擺盪的四分之一週期，要跟程式裡的 swingPeriod（2.4 秒）對上
-    ActionSpec(name: "swing", frames: 4, fps: 4 / 2.4, loop: true),
+    ActionSpec(name: "bed", frames: 2, fps: 1.2, loop: true),
     ActionSpec(name: "fly", frames: 2, fps: 4, loop: true),
     // 在地下城拿作戰武器砍 boss：一刀 6 格，第 3 格砍中（程式在這格讓 boss 閃一下）
     ActionSpec(name: "attack", frames: 6, fps: 9, loop: true),
@@ -2140,18 +2193,26 @@ func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
         p.headTilt = 0.03
         p.ears = 0.06 * CGFloat(i % 2)
         if i == 3 { p.eyes = .closed }
-    case "swing":
-        // 坐在鞦韆上，前手抓繩子（繩子和座板由程式畫在鞦韆視窗裡）。
-        // 0–1 往前盪：腳往前踢、身體往後仰；2–3 往後盪：腳收回來、身體往前
-        let forward = i < 2
-        p.lean = forward ? -0.07 : 0.06
-        p.frontFoot = forward ? CGPoint(x: 13, y: 8) : CGPoint(x: 1, y: 2)
-        p.backFoot = forward ? CGPoint(x: 10, y: 9) : CGPoint(x: -1, y: 3)
-        p.armFront = 2.75
-        p.armBack = 0.5
-        p.ears = forward ? 0.35 : -0.15
-        p.eyes = i == 1 ? .happy : .open
-        p.mouthOpen = i == 1
+    case "bed":
+        // 躺在床上睡覺：整個人往左躺下（頭靠在左邊的枕頭上），棉被蓋到肩膀（棉被是床的前層，由程式疊在她前面）。
+        // 2 格：呼吸時身體微微起伏，z 一個兩個。
+        p.lean = -1.35
+        p.bodyX = 40
+        p.bodyY = 24
+        p.squashX = 1 + 0.025 * CGFloat(i)
+        p.armFront = 0.1; p.armBack = 0.1
+        p.headTilt = -0.12
+        p.ears = 0.25
+        p.eyes = .closed
+        p.zzz = i + 1
+        p.zzzX = 60
+        // 腳順著身體伸直（腳的位置不跟著上半身轉，要自己算）
+        let ut = upperTransform(p)
+        for (foot, isFront) in [(footFront, true), (footBack, false)] {
+            let target = CGPoint(x: foot.x, y: foot.y + 2).applying(ut)
+            let d = CGPoint(x: target.x - foot.x, y: target.y - foot.y)
+            if isFront { p.frontFoot = d } else { p.backFoot = d }
+        }
     case "fly":
         // 坐在飛機駕駛座：腰以下被機身擋住（腳縮起來，別從機腹露出來），雙手握操縱桿，耳朵被風吹到後面
         p.frontFoot = CGPoint(x: 10, y: 8)
@@ -2407,52 +2468,85 @@ func drawComputer(_ ctx: CGContext, on: Bool) {
     }
 }
 
-// MARK: - 鞦韆佈景（獨立道具圖）
+// MARK: - 床（獨立道具圖）
 
-// 一棵樹，樹枝往左伸，繩子從 swingPivot 垂下來。繩子和座板會跟著她擺，由程式畫，這張圖只有樹。
-// 一樣用寵物畫布的座標：鞦韆靜止時，寵物視窗 x 對齊這張圖的 x，她就坐在座板上。
-let swingWidth: CGFloat = 200
-let swingHeight: CGFloat = 190
-let swingPivot = CGPoint(x: 65.5, y: 130)   // 設計座標（輸出時再加 offsetX）；Scenery.swift 的 SwingRig 要跟著改
+// 床頭在左、床尾在右。一樣用寵物畫布的座標：寵物視窗 x 對齊床的視窗 x，她躺下時頭剛好在枕頭上。
+// 分三張：
+//   bed.png        沒人睡的樣子（棉被平鋪）
+//   bed_back.png   她躺上去後，墊在她後面的部分（床架、床墊、枕頭）
+//   bed_front.png  蓋在她身上的棉被（程式疊在寵物視窗前面）
+let bedWidth: CGFloat = 150
+let bedHeight: CGFloat = 64
+let quilt = hex(0xF4B6C8), quiltDark = hex(0xE08AA6), quiltLight = hex(0xFBD9E3)
+let sheetWhite = hex(0xFBF7F2), sheetShade = hex(0xE6DED4)
 
-func drawSwingTree(_ ctx: CGContext) {
-    let bark = hex(0x8B5E3C)
-    let leaf = hex(0x7CC46A)
-    let leafLight = hex(0xA6DB8C)
+enum BedPart { case empty, back, front }
 
-    // 樹幹（右邊）和往左伸的樹枝
-    let trunk = CGMutablePath()
-    trunk.move(to: CGPoint(x: 132, y: ground))
-    trunk.addQuadCurve(to: CGPoint(x: 141, y: 150), control: CGPoint(x: 142, y: 60))
-    trunk.addLine(to: CGPoint(x: 161, y: 150))
-    trunk.addQuadCurve(to: CGPoint(x: 172, y: ground), control: CGPoint(x: 160, y: 60))
-    trunk.closeSubpath()
-    shape(ctx, trunk, bark)
-    line(ctx, segment(CGPoint(x: 150, y: 28), CGPoint(x: 152, y: 52)), hex(0x6E452E), width: 1.6)
-    line(ctx, segment(CGPoint(x: 156, y: 80), CGPoint(x: 155, y: 96)), hex(0x6E452E), width: 1.6)
-
-    let branch = CGMutablePath()
-    branch.move(to: CGPoint(x: 146, y: 124))
-    branch.addQuadCurve(to: CGPoint(x: 55, y: 130), control: CGPoint(x: 100, y: 122))
-    branch.addLine(to: CGPoint(x: 54, y: 137))
-    branch.addQuadCurve(to: CGPoint(x: 146, y: 142), control: CGPoint(x: 100, y: 134))
-    branch.closeSubpath()
-    shape(ctx, branch, bark)
-
-    // 樹葉：幾團圓圓的葉子，蓋住樹枝根部
-    for (c, r) in [(CGPoint(x: 96, y: 150), CGFloat(17)), (CGPoint(x: 172, y: 146), CGFloat(17)),
-                   (CGPoint(x: 152, y: 160), CGFloat(28)), (CGPoint(x: 122, y: 160), CGFloat(24)),
-                   (CGPoint(x: 140, y: 176), CGFloat(20)), (CGPoint(x: 60, y: 146), CGFloat(13))] {
-        shape(ctx, ellipse(c.x, c.y, r * 2, r * 1.6), leaf)
+func drawBed(_ ctx: CGContext, _ part: BedPart) {
+    if part != .front {
+        // 床頭板（左邊、高）：圓頂，中間一顆小愛心
+        let head = CGMutablePath()
+        head.move(to: CGPoint(x: -5, y: ground))
+        head.addLine(to: CGPoint(x: -5, y: 50))
+        head.addQuadCurve(to: CGPoint(x: 9, y: 50), control: CGPoint(x: 2, y: 62))
+        head.addLine(to: CGPoint(x: 9, y: ground))
+        head.closeSubpath()
+        shape(ctx, head, wood, lineWidth: 1.8)
+        line(ctx, segment(CGPoint(x: 2, y: 12), CGPoint(x: 2, y: 46)), woodDark, width: 1.2)
+        // 床腳
+        for x in [CGFloat(12), CGFloat(124)] {
+            shape(ctx, rounded(x, ground, 5, 10, 1.5), woodDark, lineWidth: 1.6)
+        }
+        // 床架
+        shape(ctx, rounded(6, 11, 130, 8, 2.5), wood, lineWidth: 1.8)
+        // 床墊
+        shape(ctx, rounded(8, 18, 126, 9, 3.5), sheetWhite, lineWidth: 1.8)
+        line(ctx, segment(CGPoint(x: 12, y: 21), CGPoint(x: 130, y: 21)), sheetShade, width: 1.2)
+        // 枕頭
+        let pillow = CGMutablePath()
+        pillow.move(to: CGPoint(x: 14, y: 27))
+        pillow.addQuadCurve(to: CGPoint(x: 17, y: 40), control: CGPoint(x: 11, y: 34))
+        pillow.addQuadCurve(to: CGPoint(x: 55, y: 39), control: CGPoint(x: 36, y: 45))
+        pillow.addQuadCurve(to: CGPoint(x: 54, y: 27), control: CGPoint(x: 59, y: 33))
+        pillow.closeSubpath()
+        shape(ctx, pillow, hex(0xFFFFFF), lineWidth: 1.8)
+        line(ctx, quad(CGPoint(x: 20, y: 31), CGPoint(x: 50, y: 31), CGPoint(x: 35, y: 29)), sheetShade, width: 1.2)
     }
-    for c in [CGPoint(x: 144, y: 170), CGPoint(x: 116, y: 166), CGPoint(x: 172, y: 154), CGPoint(x: 92, y: 155), CGPoint(x: 56, y: 149)] {
-        shape(ctx, ellipse(c.x, c.y, 10, 6), leafLight, stroke: false)
+    if part == .back { return }
+
+    // 棉被：沒人睡時平鋪、上緣反摺一段；有人睡時鼓起來，從她肩膀蓋到腳
+    let blanket = CGMutablePath()
+    if part == .empty {
+        blanket.move(to: CGPoint(x: 60, y: 30))
+        blanket.addLine(to: CGPoint(x: 133, y: 30))
+    } else {
+        blanket.move(to: CGPoint(x: 56, y: 44))
+        blanket.addCurve(to: CGPoint(x: 133, y: 33), control1: CGPoint(x: 76, y: 52), control2: CGPoint(x: 114, y: 42))
     }
-    // 一朵小花和樹下的草
-    shape(ctx, ellipse(108, 140, 7, 7), hex(0xF7A1A8), lineWidth: 1.2)
-    for x in [CGFloat(126), 178, 186] {
-        line(ctx, segment(CGPoint(x: x, y: ground), CGPoint(x: x - 3, y: ground + 7)), leaf, width: 2)
-        line(ctx, segment(CGPoint(x: x, y: ground), CGPoint(x: x + 3, y: ground + 6)), leaf, width: 2)
+    blanket.addQuadCurve(to: CGPoint(x: 135, y: 13), control: CGPoint(x: 138, y: 24))
+    blanket.addLine(to: CGPoint(x: part == .empty ? 60 : 52, y: 13))
+    blanket.addQuadCurve(to: part == .empty ? CGPoint(x: 60, y: 30) : CGPoint(x: 56, y: 44),
+                         control: part == .empty ? CGPoint(x: 57, y: 22) : CGPoint(x: 48, y: 28))
+    blanket.closeSubpath()
+    shape(ctx, blanket, quilt, lineWidth: 1.8)
+    // 棉被上的格線和小圓點
+    clipped(ctx, to: blanket) {
+        for x in stride(from: CGFloat(72), through: 132, by: 16) {
+            line(ctx, segment(CGPoint(x: x, y: 10), CGPoint(x: x + 3, y: 60)), quiltDark, width: 1)
+        }
+        for (x, y) in [(CGFloat(80), CGFloat(24)), (96, 34), (112, 22), (126, 30), (66, 36), (88, 16), (120, 15)] {
+            shape(ctx, ellipse(x, y, 3, 3), quiltLight, stroke: false)
+        }
+    }
+    line(ctx, blanket, outline, width: 1.8)
+    // 反摺的被緣
+    if part == .empty {
+        shape(ctx, rounded(58, 26, 76, 6, 3), quiltLight, lineWidth: 1.6)
+    } else {
+        let fold = CGMutablePath()
+        fold.move(to: CGPoint(x: 54, y: 42))
+        fold.addCurve(to: CGPoint(x: 66, y: 32), control1: CGPoint(x: 61, y: 44), control2: CGPoint(x: 66, y: 38))
+        line(ctx, fold, quiltDark, width: 1.4)
     }
 }
 
@@ -3090,7 +3184,7 @@ let previewFrames: Set<String>? = ProcessInfo.processInfo.environment["LOOK_PREV
 let outfitAnchors: [String: String] = [
     "cap": "head", "party_hat": "head", "glasses": "head", "sunglasses": "head", "straw_hat": "head",
     "witch_hat": "head", "crown": "head", "ribbon": "head", "flower_crown": "head", "headphones": "head",
-    "goggles": "head", "heart_glasses": "head",
+    "goggles": "head", "heart_glasses": "head", "mokke": "head",
     "scarf": "upper", "bowtie": "upper", "cape": "upper", "bell_collar": "upper", "backpack": "upper",
 ]
 // 氣球的線從手拉到固定的氣球、劍 / 雨傘 / 棒棒糖跟著手臂角度轉（打 boss 時是武器）、翅膀會張開 / 拍動、要挖掉身體，這些還是逐格畫。
@@ -3176,11 +3270,13 @@ try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, m
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: true) }, "props/dining_meal.png")
 try write(renderPNG(width: computerWidth, height: computerHeight) { drawComputer($0, on: false) }, "props/computer.png")
 try write(renderPNG(width: computerWidth, height: computerHeight) { drawComputer($0, on: true) }, "props/computer_on.png")
-try write(renderPNG(width: swingWidth, height: swingHeight) { drawSwingTree($0) }, "props/swing.png")
+for (part, name) in [(BedPart.empty, "bed"), (.back, "bed_back"), (.front, "bed_front")] {
+    try write(renderPNG(width: bedWidth, height: bedHeight) { drawBed($0, part) }, "props/\(name).png")
+}
 for (part, name) in [(PlanePart.parked, "plane"), (.back, "plane_back"), (.front(0), "plane_front_0"), (.front(1), "plane_front_1")] {
     try write(renderPNG(width: planeWidth, height: planeHeight) { drawPlane($0, part) }, "props/\(name).png")
 }
-count += 11
+count += 13
 }
 
 // 外觀圖層：每種髮型畫 hairBehind / head，每套服裝畫 base / top，各自獨立，App 再疊起來。

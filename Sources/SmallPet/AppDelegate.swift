@@ -258,10 +258,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    // 她正在用的電腦桌、鞦韆或飛機被隱藏了（開飛機時會直接掉下來，夠高就開傘）：不用了，家具才會馬上收起來。
+    // 她正在用的電腦桌、床或飛機被隱藏了（開飛機時會直接掉下來，夠高就開傘）：不用了，家具才會馬上收起來。
     // 餐桌不算：吃飯時餐桌本來就會暫時出現，吃完才收。
     private func leaveHiddenProps() {
-        if [scenery.computer, scenery.swing, scenery.plane].contains(where: { $0.inUse && !scenery.isShown($0) }) {
+        if [scenery.computer, scenery.bed, scenery.plane].contains(where: { $0.inUse && !scenery.isShown($0) }) {
             pet.stopBusy()
         }
     }
@@ -298,26 +298,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    // 動畫迴圈每一幀呼叫：吃飯 / 打電腦 / 盪鞦韆途中被抓走或改做別的事，就把家具收拾好。
+    // 動畫迴圈每一幀呼叫：吃飯 / 打電腦 / 上床睡覺途中被抓走或改做別的事，就把家具收拾好。
     private func checkProps() {
         if !pet.isBusy { scenery.releaseAll(below: pet.window) }
-        scenery.updateSwing(riderOrigin: pet.action == .swing ? pet.window.frame.origin : nil)
+        scenery.updateBed(sleeper: pet.action == .bed ? pet.window : nil)
         scenery.updatePlane(rider: pet.action == .fly ? pet.window : nil,
                             facingLeft: pet.facingLeft, pitch: pet.flightPitch, time: CACurrentMediaTime())
     }
 
     // MARK: - 自己找事做
 
-    // 自動模式換動作時偶爾呼叫：去角落坐好一陣子；電腦桌、鞦韆、飛機有擺出來的話，也可能過去。
+    // 自動模式換動作時偶爾呼叫：去角落坐好一陣子；電腦桌、床、飛機有擺出來的話，也可能過去。
     // 回傳 true 代表已經出發了。
     private func goOut() -> Bool {
         var choices = ["corner", "corner"]
         if scenery.isShown(scenery.computer) { choices.append("computer") }
-        if scenery.isShown(scenery.swing) { choices.append("swing") }
+        if scenery.isShown(scenery.bed) { choices.append("bed") }
         if scenery.isShown(scenery.plane) { choices.append("plane") }
         switch choices.randomElement() {
         case "computer": visit(scenery.computer, doing: .typing)
-        case "swing": visit(scenery.swing, doing: .swing)
+        case "bed": visit(scenery.bed, doing: .bed)
         case "plane": visit(scenery.plane, doing: .fly)
         default: restInCorner()
         }
@@ -362,7 +362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         highlightedProp = target
     }
 
-    // 放手時：在家具上的話，回傳落地後要做的事（吃飯、打電腦、盪鞦韆、開飛機）。
+    // 放手時：在家具上的話，回傳落地後要做的事（吃飯、打電腦、上床睡覺、開飛機）。
     private func dropAction(at frame: NSRect) -> (() -> Void)? {
         guard !pet.concealed, !scenery.mealInProgress, let prop = prop(under: frame) else { return nil }
         return { [weak self] in
@@ -371,15 +371,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.feed()   // 今天餵滿了的話她會說吃不下
             } else if prop === self.scenery.computer {
                 self.visit(prop, doing: .typing)
-            } else if prop === self.scenery.swing {
-                self.visit(prop, doing: .swing)
+            } else if prop === self.scenery.bed {
+                self.visit(prop, doing: .bed)
             } else if prop === self.scenery.plane {
                 self.visit(prop, doing: .fly)
             }
         }
     }
 
-    // 走到家具旁邊做事（打電腦、盪鞦韆），時間長短用動作預設的。
+    // 走到家具旁邊做事（打電腦、上床睡覺），時間長短用動作預設的。
     private func visit(_ prop: Prop, doing action: PetAction) {
         scenery.releaseAll(below: pet.window)
         scenery.use(prop, below: pet.window)

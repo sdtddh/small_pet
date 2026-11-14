@@ -1,4 +1,4 @@
-// Scenery.swift —— 桌面上的家具佈景：餐桌、電腦桌、鞦韆（一棵樹）、飛機。
+// Scenery.swift —— 桌面上的家具佈景：餐桌、電腦桌、床、飛機。
 //
 // 每件家具是獨立的透明視窗，擺在螢幕底部、寵物後面。按住家具：
 //   - 左右拖：移動（位置會記住）
@@ -7,7 +7,8 @@
 // 選單的「家具與佈景」可以一起顯示 / 隱藏，也可以個別勾選要擺哪幾件。
 // ⌥F 是另一回事：把寵物和家具全部藏起來（見 AppDelegate.toggleEverything），勾選不會變。
 //   - 餐桌：餵食時盤子會放上胡蘿蔔，她自己走過來坐下吃；就算家具是隱藏的也會暫時出現，吃完再收起來。
-//   - 電腦桌、鞦韆、飛機：家具顯示時，她閒著會自己過去打電腦、盪鞦韆、開飛機。
+//   - 電腦桌、床、飛機：家具顯示時，她閒著會自己過去打電腦、上床睡覺、開飛機。
+//     床分成兩層：床架、枕頭在她後面，她躺好後棉被（另一個視窗）蓋在她前面。
 //     飛機分成兩個視窗夾住寵物：後層在她後面、前層（機身、螺旋槳）在她前面，看起來就像坐在駕駛艙裡。
 //
 // 圖片用的座標跟寵物畫布一樣，所以寵物視窗的 x 對齊家具視窗的 x，她就剛好坐在凳子 / 座板上。
@@ -19,15 +20,15 @@ final class Scenery {
 
     let dining: Prop
     let computer: Prop
-    let swing: Prop
+    let bed: Prop
     let plane: Prop
-    private let rig: SwingRig
+    private let blanket: SceneryWindow
     private let planeFront: SceneryWindow
     private let planeParked: NSImage?
     private let planeBack: NSImage?
     private let propellerFrames: [NSImage?]
     private var planeHome: NSPoint?     // 飛行中，飛機原本停的位置
-    var all: [Prop] { [dining, computer, swing, plane] }
+    var all: [Prop] { [dining, computer, bed, plane] }
 
     // 家具總開關（選單切換）。打開時只顯示有勾選的那幾件（Prop.enabled）。
     private(set) var pinned: Bool {
@@ -46,14 +47,14 @@ final class Scenery {
 
     init(sprites: SpriteLibrary) {
         let mid = NSScreen.main?.visibleFrame.midX ?? 0
-        // 第一次的預設位置：電腦桌在左、餐桌在中間、鞦韆在右。
+        // 第一次的預設位置：電腦桌在左、餐桌在中間、床在右。
         dining = Prop(sprites: sprites, title: "餐桌", name: "dining", activeName: "dining_meal", key: "scenery.x", defaultX: mid - 70)
         computer = Prop(sprites: sprites, title: "電腦桌", name: "computer", activeName: "computer_on", key: "scenery.computer.x", defaultX: mid - 330)
-        swing = Prop(sprites: sprites, title: "鞦韆", name: "swing", activeName: nil, key: "scenery.swing.x", defaultX: mid + 180)
+        bed = Prop(sprites: sprites, title: "床", name: "bed", activeName: "bed_back", key: "scenery.bed.x", defaultX: mid + 170)
         plane = Prop(sprites: sprites, title: "飛機", name: "plane", activeName: nil, key: "scenery.plane.x",
                      defaultX: mid + 420, sink: Self.planeMargin)
-        rig = SwingRig()
-        swing.window.addOverlay(rig.layer)
+        blanket = SceneryWindow(image: sprites.prop("bed_front"))
+        blanket.ignoresMouseEvents = true
         planeParked = sprites.prop("plane")
         planeBack = sprites.prop("plane_back")
         propellerFrames = [sprites.prop("plane_front_0"), sprites.prop("plane_front_1")]
@@ -165,10 +166,17 @@ final class Scenery {
         planeFront.setImage(propellerFrames[Int(time * 20) % propellerFrames.count])
     }
 
-    // 每一幀呼叫：她在盪鞦韆時，繩子和座板跟著她的視窗位置走；不然就靜靜垂著。
-    func updateSwing(riderOrigin: NSPoint?) {
-        let rest = swing.window.frame.origin
-        rig.offset = riderOrigin.map { CGPoint(x: $0.x - rest.x, y: $0.y - rest.y) } ?? .zero
+    // 每一幀呼叫：她躺在床上時，棉被蓋在她前面（點到她、她的視窗跳到最前面時再蓋回去）；起床就收起來。
+    // - sleeper：她的視窗；nil 代表她不在床上。
+    func updateBed(sleeper window: NSWindow?) {
+        guard let window, bed.inUse, bed.window.isVisible else {
+            if blanket.isVisible { blanket.orderOut(nil) }
+            return
+        }
+        blanket.setFrameOrigin(bed.window.frame.origin)
+        if !blanket.isVisible || blanket.orderedIndex > window.orderedIndex {
+            blanket.order(.above, relativeTo: window.windowNumber)
+        }
     }
 
     private func refresh(below pet: NSWindow) {
@@ -199,7 +207,7 @@ final class Prop {
     private let image: NSImage?
     private let activeImage: NSImage?
 
-    // 她正在用（吃飯、打電腦、盪鞦韆）：換圖、不能拖、不能往下拉收起來（往上拉開小工具還是可以）。
+    // 她正在用（吃飯、打電腦、睡床）：換圖、不能拖、不能往下拉收起來（往上拉開小工具還是可以）。
     var inUse = false {
         didSet {
             window.isDraggable = !inUse
@@ -240,50 +248,6 @@ final class Prop {
         guard let visible = NSScreen.main?.visibleFrame else { return }
         let x = min(max(window.frame.minX, visible.minX), visible.maxX - window.frame.width)
         window.setFrameOrigin(NSPoint(x: x, y: visible.minY - sink))
-    }
-}
-
-// MARK: - 鞦韆的繩子和座板
-
-// 樹是圖片，繩子和座板會動，所以用 CAShapeLayer 畫。座標跟 generate-bunny.swift 的
-// swingPivot、座板位置一致（已經加上 offsetX 8）。offset 是她的視窗離靜止位置多遠。
-@MainActor
-final class SwingRig {
-    let layer = CALayer()
-    private let ropes = CAShapeLayer()
-    private let seat = CAShapeLayer()
-
-    private let pivot = CGPoint(x: 73.5, y: 130)
-    private let ropeEnds = [CGPoint(x: 40, y: 16.5), CGPoint(x: 76, y: 16.5)]
-    private let seatRect = CGRect(x: 34, y: 12, width: 54, height: 4.5)
-
-    var offset = CGPoint.zero {
-        didSet { if offset != oldValue { redraw() } }
-    }
-
-    init() {
-        ropes.strokeColor = NSColor(srgbRed: 0.45, green: 0.32, blue: 0.22, alpha: 1).cgColor
-        ropes.fillColor = nil
-        ropes.lineWidth = 1.6
-        ropes.lineCap = .round
-        seat.fillColor = NSColor(srgbRed: 0.784, green: 0.576, blue: 0.353, alpha: 1).cgColor
-        seat.strokeColor = NSColor(srgbRed: 0.169, green: 0.133, blue: 0.188, alpha: 1).cgColor
-        seat.lineWidth = 1.6
-        layer.addSublayer(ropes)
-        layer.addSublayer(seat)
-        // 靜止時的動畫關掉，位置每一幀直接更新
-        for l in [ropes, seat] { l.actions = ["path": NSNull()] }
-        redraw()
-    }
-
-    private func redraw() {
-        let r = CGMutablePath()
-        for end in ropeEnds {
-            r.move(to: pivot)
-            r.addLine(to: CGPoint(x: end.x + offset.x, y: end.y + offset.y))
-        }
-        ropes.path = r
-        seat.path = CGPath(roundedRect: seatRect.offsetBy(dx: offset.x, dy: offset.y), cornerWidth: 2, cornerHeight: 2, transform: nil)
     }
 }
 
@@ -350,12 +314,6 @@ final class SceneryWindow: NSWindow {
     // 以視窗中心為基準翻面 / 旋轉圖片。
     func setArtTransform(_ transform: CGAffineTransform) {
         art.setAffineTransform(transform)
-    }
-
-    // 疊在圖片上面的圖層（鞦韆的繩子）。
-    func addOverlay(_ layer: CALayer) {
-        layer.frame = holder.bounds   // 放在 holder 裡，拉動時跟著樹一起動
-        holder.addSublayer(layer)
     }
 
     // MARK: 拖動手勢

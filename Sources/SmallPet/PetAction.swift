@@ -16,7 +16,7 @@ enum PetAction: String, CaseIterable {
     case parachute  // 從高處掉下來時打開降落傘，慢慢飄下去
     case eat        // 坐著啃胡蘿蔔（餵食時）
     case typing     // 坐在電腦桌前打電腦
-    case swing      // 盪鞦韆
+    case bed        // 躺在床上睡覺
     case fly        // 開飛機
     case attack     // 在地下城拿劍砍 boss（第 3 格砍中）
 
@@ -35,13 +35,13 @@ enum PetAction: String, CaseIterable {
         case .parachute: "降落傘"
         case .eat: "吃東西"
         case .typing: "打電腦"
-        case .swing: "盪鞦韆"
+        case .bed: "上床睡覺"
         case .fly: "開飛機"
         case .attack: "戰鬥"
         }
     }
 
-    // 可以從選單手動指定的動作（掉落、被抓住、降落傘是物理狀態；吃東西、打電腦、盪鞦韆要走到家具旁才做，都不給選）。
+    // 可以從選單手動指定的動作（掉落、被抓住、降落傘是物理狀態；吃東西、打電腦、上床睡覺要走到家具旁才做，都不給選）。
     static let selectable: [PetAction] = [.idle, .walk, .run, .jump, .sit, .sleep, .dance]
 
     // 自動模式下隨機挑選動作的權重，數字越大越常出現。偏安靜：多坐多發呆，少跑跳。
@@ -54,7 +54,7 @@ enum PetAction: String, CaseIterable {
         case .jump: 5
         case .run: 4
         case .dance: 4
-        case .fall, .dragged, .parachute, .eat, .typing, .swing, .fly, .attack: 0
+        case .fall, .dragged, .parachute, .eat, .typing, .bed, .fly, .attack: 0
         }
     }
 
@@ -69,7 +69,7 @@ enum PetAction: String, CaseIterable {
         case .dance: 4...6      // 一輪 2 秒，大約跳 2～3 輪
         case .eat: 3...3
         case .typing: 20...45
-        case .swing: 15...30
+        case .bed: 40...90
         case .fly: 20...35      // 在天上繞多久，之後才開始降落
         case .jump, .fall, .dragged, .parachute: 0...0   // 由物理決定何時結束
         case .attack: 0...0     // 打到冒險時間結束為止
