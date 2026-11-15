@@ -2,6 +2,7 @@
 //
 // 每個部位（作戰武器、頭、臉、脖子、背後）同時只能穿一件；選擇會存在 UserDefaults，下次開啟還在。
 // 另外還有「外觀」：髮型和衣服，純粹換造型、不加戰鬥力。
+// 戰鬥力跟身上穿什麼無關：每個部位自動算擁有的服裝裡戰力最高的那件（見 bestGear），愛怎麼穿就怎麼穿。
 import AppKit
 import SwiftUI
 
@@ -96,11 +97,19 @@ final class Wardrobe: ObservableObject {
     static let weaponSlot = "hand"
     static let defaultWeapon = "branch"
 
-    // 身上服裝的戰鬥力加成總和。
-    var powerBonus: Int {
-        equipped.values.reduce(0) { sum, id in
-            sum + (sprites.manifest.outfits.first { $0.id == id }?.power ?? 0)
+    // 算戰鬥力用的最強組合：每個部位挑擁有的服裝裡戰力最高的那件（沒有加成的部位不算；
+    // 作戰武器例外，只有樹枝 +0 也算，衣櫃才標得出打 boss 時用哪把算）。
+    // 只看配件部位（manifest.slots），兔耳、尾巴、耳飾這類角色特徵不加戰力。
+    var bestGear: [Manifest.Outfit] {
+        sprites.manifest.slots.reversed().compactMap { slot in
+            available(in: slot.id).filter { ($0.power ?? 0) > 0 || slot.id == Self.weaponSlot }
+                .max { ($0.power ?? 0) < ($1.power ?? 0) }
         }
+    }
+
+    // 服裝的戰鬥力加成：最強組合的總和。拿到新的戰利品會自動算進去。
+    var powerBonus: Int {
+        bestGear.reduce(0) { $0 + ($1.power ?? 0) }
     }
 
     // outfitID 傳 nil 代表脫掉這個部位。
@@ -170,6 +179,7 @@ struct WardrobeView: View {
                         }
                         Divider()
                         Text("配件").font(.callout).foregroundStyle(.secondary)
+                        bestGearHint
                     }
                     // 由上往下顯示：作戰武器 → 頭 → 臉 → 脖子 → 背後（manifest 裡是疊圖順序，所以反過來）
                     ForEach(sprites.manifest.slots.reversed()) { slot in
@@ -181,6 +191,28 @@ struct WardrobeView: View {
         }
         .padding(.vertical)
         .frame(minWidth: 450, minHeight: 600)
+    }
+
+    // 說明最強標示：打地下城直接用標示的那幾件算戰鬥力，身上穿什麼都可以。
+    private var bestGearHint: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            bestBadge
+            Text("是每個部位戰力最高的配件。打地下城會直接用有標示的配件計算戰鬥力，身上穿什麼都不影響，不用特地換裝。")
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    }
+
+    // 「最強」小標籤（衣櫃卡片右上角、說明文字共用）。
+    private var bestBadge: some View {
+        Label("最強", systemImage: "bolt.fill")
+            .font(.caption2.bold())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Color.orange))
+            .fixedSize()
     }
 
     private func lookRow(_ title: String, _ options: [Manifest.LookOption], selected: String,
@@ -208,7 +240,7 @@ struct WardrobeView: View {
     }
 
     // 一張選項卡：縮圖 + 名字，選中時有框。
-    private func card(name: String, selected: Bool, @ViewBuilder preview: () -> some View) -> some View {
+    private func card(name: String, selected: Bool, best: Bool = false, @ViewBuilder preview: () -> some View) -> some View {
         VStack(spacing: 4) {
             preview().frame(width: 64, height: 64)
             // 長名字換行（最多兩行），字不縮小；兩行固定高度讓卡片對齊，游標停上去看全名。
@@ -226,6 +258,9 @@ struct WardrobeView: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(selected ? Color.accentColor : .clear, lineWidth: 2)
         )
+        .overlay(alignment: .topTrailing) {
+            if best { bestBadge.offset(x: 4, y: -4) }
+        }
     }
 
     private func slotRow(_ slot: Manifest.Slot) -> some View {
@@ -254,6 +289,7 @@ struct WardrobeView: View {
 
     private func option(name: String, outfitID: String?, slot: String) -> some View {
         let selected = wardrobe.equipped[slot] == outfitID
+        let best = outfitID.map { id in wardrobe.bestGear.contains { $0.id == id } } ?? false
         // 縮圖：目前其他部位的穿搭 + 換上這一件
         var preview = wardrobe.equipped
         preview[slot] = outfitID
@@ -261,7 +297,7 @@ struct WardrobeView: View {
         return Button {
             wardrobe.equip(outfitID, slot: slot)
         } label: {
-            card(name: name, selected: selected) {
+            card(name: name, selected: selected, best: best) {
                 PetPreview(sprites: sprites, outfits: preview, look: wardrobe.look)
             }
         }

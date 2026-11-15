@@ -60,8 +60,9 @@ final class PetStats: ObservableObject {
     static let maxLog = 20
 
     @Published private(set) var state: GameState
-    // 身上服裝的戰鬥力加成，換裝時由外部更新。
-    @Published var outfitBonus = 0
+    // 服裝的戰鬥力加成（Wardrobe 提供：每個部位擁有的最強服裝）。不用存：拿到新服裝時 state 會變，畫面自然重算。
+    var outfitBonusSource: () -> Int = { 0 }
+    var outfitBonus: Int { outfitBonusSource() }
 
     private let saveURL: URL
 

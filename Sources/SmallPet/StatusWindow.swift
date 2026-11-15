@@ -122,6 +122,15 @@ struct StatusView: View {
 
             VStack(spacing: 6) {
                 Label("戰鬥力 \(stats.power)（等級 \(stats.level * 10) + 服裝 \(stats.outfitBonus)）", systemImage: "bolt.fill")
+                // 服裝加成自動用擁有的最強組合，跟身上穿什麼無關
+                let gear = wardrobe.bestGear
+                if !gear.isEmpty {
+                    Text("最強組合：" + gear.map { "\(wardrobe.sprites.displayName($0)) +\($0.power ?? 0)" }.joined(separator: "、"))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 24)
+                }
                 Label {
                     Text("今天還能餵 \(stats.feedsLeft) 次")
                 } icon: {

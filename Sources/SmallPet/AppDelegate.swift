@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         sprites = SpriteLibrary()
         wardrobe = Wardrobe(sprites: sprites, stats: stats)
-        stats.outfitBonus = wardrobe.powerBonus
+        stats.outfitBonusSource = { [weak self] in self?.wardrobe.powerBonus ?? 0 }
         wardrobeWindow = WardrobeWindowController(wardrobe: wardrobe)
         inputSync = InputSync()   // 先建好：狀態視窗的「跟著我打字」開關和「權限」頁要用（onKey / onClick 等寵物建好再接）
         statusWindow = StatusWindowController(
@@ -46,7 +46,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             self.pet.view.setOutfits(self.wardrobe.equipped)
             self.pet.view.setLook(self.wardrobe.look)
-            self.stats.outfitBonus = self.wardrobe.powerBonus
             if self.pet.travel == .none { self.pet.speech.say("wardrobe") }
         }
         pet.view.onRightClick = { [weak self] event in
