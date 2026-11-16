@@ -1775,6 +1775,8 @@ let hairStyles: [HairStyle] = [
                shine: hex(0xF5E2C8), accent: hex(0xC9A07E)),
     wolfMullet(id: "wolf_silver", name: "日系鯔魚頭・黑銀挑染", base: hex(0x2E2A33), dark: hex(0x1D1A21),
                shine: hex(0xD9DEE8), accent: hex(0xC4CBD8), ring: true),
+    wolfMullet(id: "wolf_gold", name: "日系鯔魚頭・黑金挑染", base: hex(0x2E2A33), dark: hex(0x1D1A21),
+               shine: hex(0xF6DE9A), accent: hex(0xE0B54A), ring: true),
     himeCut(),
     shortBob(),
 ]
