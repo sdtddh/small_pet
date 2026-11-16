@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusWindow: StatusWindowController!
     private var scenery: Scenery!
     private let calculator = CalculatorWindowController()
+    private let systemMonitor = SystemMonitor()
+    private lazy var systemInfo = SystemInfoWindowController(monitor: systemMonitor)
     private var inputSync: InputSync!
     private var boss: BossWindow?
     // 試打 boss：不算冒險次數、不存檔、不給戰利品，打 15 秒看看效果。
@@ -59,6 +61,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         scenery = Scenery(sprites: sprites)
         scenery.restore(below: pet.window)
         setUpPropGestures()
+        // 床頭櫃擺出來、或系統資訊視窗開著時才讀 CPU / 記憶體。
+        systemMonitor.isNeeded = { [weak self] in
+            guard let self else { return false }
+            return self.scenery.monitor.window.isVisible || self.systemInfo.isVisible
+        }
+        systemMonitor.onSample = { [weak self] in self?.scenery.gauge.update($0) }
         HotKey.register { [weak self] in self?.toggleEverything() }
         pet.onOuting = { [weak self] in self?.goOut() ?? false }
         pet.onDragHover = { [weak self] frame in self?.highlightProp(under: frame) }
@@ -240,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // 按住家具往下拉：收起來；往上拉：開小工具——電腦桌是計算機，餐桌是叫她來吃飯（算一次餵食），
-    // 床是關閉螢幕。
+    // 床是關閉螢幕，床頭櫃是系統資訊。
     private func setUpPropGestures() {
         for prop in scenery.all {
             prop.window.onSwipeDown = { [weak self, unowned prop] in
@@ -255,6 +263,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         scenery.dining.window.onSwipeUp = { [weak self] in
             guard let self, self.pet.travel == .none else { return }   // 出門冒險 / 打 boss 時不能吃
             self.feed()
+        }
+        scenery.monitor.window.onSwipeUp = { [weak self] in
+            guard let self else { return }
+            self.systemInfo.show(above: self.scenery.monitor.window.frame)
         }
         scenery.bed.window.onSwipeUp = {
             // 等往上伸的動畫彈回來再關，看起來比較順。
@@ -362,7 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func prop(under frame: NSRect) -> Prop? {
         let point = NSPoint(x: frame.midX, y: frame.minY + 20)
         return scenery.all.first { prop in
-            scenery.isShown(prop) && !prop.inUse && prop.window.isVisible
+            prop !== scenery.monitor && scenery.isShown(prop) && !prop.inUse && prop.window.isVisible
                 && prop.window.frame.insetBy(dx: -6, dy: -24).contains(point)
         }
     }

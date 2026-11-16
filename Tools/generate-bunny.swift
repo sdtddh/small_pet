@@ -3264,6 +3264,64 @@ if previewFrames == nil || ProcessInfo.processInfo.environment["BOSS_PREVIEW"] !
         }
     }
 }
+// MARK: - 床頭櫃（系統監視器）
+//
+// monitor.png：木頭床頭櫃上放一台儀表。儀表的錶面畫 CPU 用量的色帶（綠 → 黃 → 紅），上面的燈泡亮起來代表記憶體壓力。
+// 指針和燈泡會動，由程式（SystemGauge.swift）畫在圖上面，所以這張圖只畫不會動的部分；
+// 指針支點、燈泡位置要跟 SystemGauge 的常數一致。
+let monitorWidth: CGFloat = 64, monitorHeight: CGFloat = 112
+
+func drawMonitorLabel(_ ctx: CGContext, _ s: String, _ x: CGFloat, _ y: CGFloat) {
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
+    let str = NSAttributedString(string: s, attributes: [.font: NSFont.systemFont(ofSize: 4.2, weight: .heavy),
+                                                         .foregroundColor: NSColor(cgColor: outline)!])
+    let size = str.size()
+    str.draw(at: NSPoint(x: x - size.width / 2, y: y - size.height / 2))
+    NSGraphicsContext.restoreGraphicsState()
+}
+
+func drawMonitor(_ ctx: CGContext) {
+    let drawer = hex(0xD9A86E)
+    // 櫃腳、櫃子、兩層抽屜、桌面
+    for x in [CGFloat(12), 47] { shape(ctx, rounded(x, ground, 5, 9, 1.5), woodDark, lineWidth: 1.6) }
+    shape(ctx, rounded(8, 10, 48, 36, 4), wood, lineWidth: 1.8)
+    for y in [CGFloat(29), 14] {
+        shape(ctx, rounded(12, y, 40, 12, 2.5), drawer, lineWidth: 1.4)
+        shape(ctx, ellipse(32, y + 6, 5, 3.4), woodDark, lineWidth: 1.1)
+    }
+    shape(ctx, rounded(5, 45, 54, 5, 2), woodDark, lineWidth: 1.6)
+    // 儀表外殼
+    shape(ctx, rounded(11, 50, 42, 33, 7), hex(0x7FB7B0), lineWidth: 1.8)
+    // 半圓錶面
+    let c = CGPoint(x: 32, y: 58), r: CGFloat = 17
+    let face = CGMutablePath()
+    face.addArc(center: c, radius: r, startAngle: 0, endAngle: .pi, clockwise: false)
+    face.closeSubpath()
+    shape(ctx, face, hex(0xFFF8E8), lineWidth: 1.5)
+    // 色帶：0–45% 綠、45–72% 黃、72–100% 紅
+    for (a0, a1, color) in [(CGFloat.pi, CGFloat.pi * 0.55, 0x6CC46A), (.pi * 0.55, .pi * 0.28, 0xF2C94C), (.pi * 0.28, 0.04, 0xE8604C)] as [(CGFloat, CGFloat, UInt32)] {
+        let band = CGMutablePath()
+        band.addArc(center: c, radius: r - 4, startAngle: a0, endAngle: a1, clockwise: true)
+        ctx.addPath(band)
+        ctx.setStrokeColor(hex(color))
+        ctx.setLineWidth(3.6)
+        ctx.setLineCap(.butt)
+        ctx.strokePath()
+        ctx.setLineCap(.round)
+    }
+    // 刻度
+    for i in 0...8 {
+        let a = CGFloat.pi * (1 - CGFloat(i) / 8)
+        line(ctx, segment(CGPoint(x: c.x + cos(a) * (r - 7.5), y: c.y + sin(a) * (r - 7.5)),
+                          CGPoint(x: c.x + cos(a) * (r - 9.5), y: c.y + sin(a) * (r - 9.5))), outline, width: 1)
+    }
+    drawMonitorLabel(ctx, "CPU", c.x, 53.8)
+    drawMonitorLabel(ctx, "RAM", c.x, 78.5)
+    // 燈座
+    shape(ctx, rounded(28, 82, 8, 5, 1.5), hex(0x9AA0A6), lineWidth: 1.4)
+}
+
 if previewFrames == nil {
 try write(renderPNG(height: canopyHeight, offset: 0) { drawCanopy($0) }, "props/parachute.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: false) }, "props/dining.png")
@@ -3276,7 +3334,8 @@ for (part, name) in [(BedPart.empty, "bed"), (.back, "bed_back"), (.front, "bed_
 for (part, name) in [(PlanePart.parked, "plane"), (.back, "plane_back"), (.front(0), "plane_front_0"), (.front(1), "plane_front_1")] {
     try write(renderPNG(width: planeWidth, height: planeHeight) { drawPlane($0, part) }, "props/\(name).png")
 }
-count += 13
+try write(renderPNG(width: monitorWidth, height: monitorHeight, offset: 0) { drawMonitor($0) }, "props/monitor.png")
+count += 14
 }
 
 // 外觀圖層：每種髮型畫 hairBehind / head，每套服裝畫 base / top，各自獨立，App 再疊起來。

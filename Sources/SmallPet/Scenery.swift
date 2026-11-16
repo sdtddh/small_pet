@@ -1,14 +1,15 @@
-// Scenery.swift —— 桌面上的家具佈景：餐桌、電腦桌、床、飛機。
+// Scenery.swift —— 桌面上的家具佈景：餐桌、電腦桌、床、床頭櫃、飛機。
 //
 // 每件家具是獨立的透明視窗，擺在螢幕底部、寵物後面。按住家具：
 //   - 左右拖：移動（位置會記住）
 //   - 往下拉：收起來（等於在選單取消勾選這件）
-//   - 往上拉：打開這件家具的小工具（電腦桌是計算機，床是關閉螢幕）；還沒有小工具的家具會彈一下
+//   - 往上拉：打開這件家具的小工具（電腦桌是計算機，床是關閉螢幕，床頭櫃是系統資訊）；還沒有小工具的家具會彈一下
 // 選單的「家具與佈景」可以一起顯示 / 隱藏，也可以個別勾選要擺哪幾件。
 // ⌥F 是另一回事：把寵物和家具全部藏起來（見 AppDelegate.toggleEverything），勾選不會變。
 //   - 餐桌：餵食時盤子會放上胡蘿蔔，她自己走過來坐下吃；就算家具是隱藏的也會暫時出現，吃完再收起來。
 //   - 電腦桌、床、飛機：家具顯示時，她閒著會自己過去打電腦、上床睡覺、開飛機。
 //     床分成兩層：床架、枕頭在她後面，她躺好後棉被（另一個視窗）蓋在她前面。
+//     床頭櫃：上面的儀表顯示 CPU 用量和記憶體壓力（見 SystemMonitor.swift），她不會去用。
 //     飛機分成兩個視窗夾住寵物：後層在她後面、前層（機身、螺旋槳）在她前面，看起來就像坐在駕駛艙裡。
 //
 // 圖片用的座標跟寵物畫布一樣，所以寵物視窗的 x 對齊家具視窗的 x，她就剛好坐在凳子 / 座板上。
@@ -21,6 +22,8 @@ final class Scenery {
     let dining: Prop
     let computer: Prop
     let bed: Prop
+    let monitor: Prop
+    let gauge: SystemGauge
     let plane: Prop
     private let blanket: SceneryWindow
     private let planeFront: SceneryWindow
@@ -28,7 +31,7 @@ final class Scenery {
     private let planeBack: NSImage?
     private let propellerFrames: [NSImage?]
     private var planeHome: NSPoint?     // 飛行中，飛機原本停的位置
-    var all: [Prop] { [dining, computer, bed, plane] }
+    var all: [Prop] { [dining, computer, bed, monitor, plane] }
 
     // 家具總開關（選單切換）。打開時只顯示有勾選的那幾件（Prop.enabled）。
     private(set) var pinned: Bool {
@@ -51,6 +54,8 @@ final class Scenery {
         dining = Prop(sprites: sprites, title: "餐桌", name: "dining", activeName: "dining_meal", key: "scenery.x", defaultX: mid - 70)
         computer = Prop(sprites: sprites, title: "電腦桌", name: "computer", activeName: "computer_on", key: "scenery.computer.x", defaultX: mid - 330)
         bed = Prop(sprites: sprites, title: "床", name: "bed", activeName: "bed_back", key: "scenery.bed.x", defaultX: mid + 170)
+        monitor = Prop(sprites: sprites, title: "床頭櫃（系統資訊）", name: "monitor", activeName: nil, key: "scenery.monitor.x", defaultX: mid + 330)
+        gauge = SystemGauge(on: monitor.window)
         plane = Prop(sprites: sprites, title: "飛機", name: "plane", activeName: nil, key: "scenery.plane.x",
                      defaultX: mid + 420, sink: Self.planeMargin)
         blanket = SceneryWindow(image: sprites.prop("bed_front"))
@@ -309,6 +314,11 @@ final class SceneryWindow: NSWindow {
         art.shadowOffset = .zero
         art.shadowRadius = 5
         art.shadowOpacity = on ? 1 : 0
+    }
+
+    // 疊在圖片上面、會動的部分（床頭櫃的指針、燈泡）。座標跟圖片一樣（點），會跟著拖拉回饋一起動。
+    func addOverlay(_ layer: CALayer) {
+        art.addSublayer(layer)
     }
 
     // 以視窗中心為基準翻面 / 旋轉圖片。
