@@ -17,6 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let systemMonitor = SystemMonitor()
     private lazy var systemInfo = SystemInfoWindowController(monitor: systemMonitor)
     private var inputSync: InputSync!
+    // 生活與專注提醒：番茄鐘、倒數計時、喝水、鬧鐘、行事曆
+    private let reminders = ReminderCenter()
+    private let reminderCard = ReminderCardController()
+    private lazy var remindersWindow = RemindersWindowController(center: reminders)
     private var boss: BossWindow?
     // 試打 boss：不算冒險次數、不存檔、不給戰利品，打 15 秒看看效果。
     private var trial: (dungeon: Dungeon, startedAt: Date, endsAt: Date)?
@@ -89,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         setupStatusItem()
+        setUpReminders()
         startAnimating()
     }
 
@@ -130,6 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let wardrobeItem = NSMenuItem(title: "衣櫃…", action: #selector(openWardrobe), keyEquivalent: "")
         wardrobeItem.target = self
         menu.addItem(wardrobeItem)
+
+        menu.addItem(makeReminderMenuItem())
 
         // 動作：
         //   說句話——只是讓她說一句，不會改變正在做的動作，也不影響自動行動
@@ -203,6 +210,110 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return menu
     }
 
+    // MARK: - 生活與專注提醒
+
+    private func setUpReminders() {
+        reminderCard.anchor = { [weak self] in
+            guard let self, !self.pet.concealed, self.pet.travel != .away else { return nil }
+            return self.pet.window.frame
+        }
+        reminders.onReminder = { [weak self] in self?.remind($0) }
+        reminders.onTick = { [weak self] in
+            guard let self else { return }
+            // 選單列圖示：專注中 🍅、休息中 ☕️、倒數中 ⏰（剩下的時間在選單裡）；專注中她安靜一點。
+            // 只換圖示不加字：選單列滿的時候（瀏海螢幕很常見），變寬的圖示會整個被 macOS 藏起來。
+            let title = self.reminders.menuBarIcon ?? "🐾"
+            if self.statusItem.button?.title != title { self.statusItem.button?.title = title }
+            self.pet.speech.quiet = self.reminders.focusing
+            if self.scenery.clock.window.isVisible { self.updateClockFace() }
+        }
+    }
+
+    // 掛鐘：指針走現在的時間；番茄鐘進行中，錶面畫出剩下的時間。
+    private func updateClockFace() {
+        var remaining: ClockFace.Remaining?
+        if let left = reminders.pomodoroLeft() {
+            let phase = reminders.pomodoro.phase
+            remaining = .init(minutes: left / 60, focus: phase == .focus, paused: reminders.pomodoro.pausedLeft != nil)
+        } else if let left = reminders.countdownLeft() {
+            remaining = .init(minutes: left / 60, focus: false, paused: reminders.countdown?.pausedLeft != nil)
+        }
+        scenery.clockFace.update(now: Date(), remaining: remaining)
+    }
+
+    // 時間到：輕輕響一聲、小卡片浮出來；她在旁邊的話也說一句、做個小動作。
+    private func remind(_ reminder: Reminder) {
+        if reminders.soundOn, let sound = NSSound(named: "Tink")?.copy() as? NSSound {
+            sound.volume = 0.35
+            sound.play()
+        }
+        reminderCard.show(reminder)
+
+        guard !pet.concealed, pet.travel == .none else { return }
+        let line: String
+        switch reminder.kind {
+        case .focusDone: line = ["辛苦了！休息一下吧～", "好專心！來伸個懶腰～", "完成一個番茄了 🍅"].randomElement()!
+        case .breakDone: line = "休息夠了嗎？準備好再開始喔"
+        case .water: line = ["一起喝水吧 💧", "咕嘟咕嘟～該補水了", "喝口水，休息一下眼睛"].randomElement()!
+        case .countdown: line = "時間到囉！"
+        case .alarm: line = "鬧鐘響囉～ 🔔"
+        case .calendar: line = "等等有行程喔 📅"
+        }
+        guard pet.canAct, !pet.isBusy else {
+            pet.speech.sayText(line)
+            return
+        }
+        switch reminder.kind {
+        case .focusDone: pet.interlude(.dance, duration: 2.5)
+        case .water: pet.interlude(.eat, duration: 2)
+        case .breakDone: pet.interlude(.idle, duration: 1)
+        case .countdown, .alarm, .calendar: pet.perform(.jump)
+        }
+        pet.speech.sayText(line)
+    }
+
+    private func makeReminderMenuItem() -> NSMenuItem {
+        let sub = NSMenu()
+        func add(_ title: String, _ action: Selector, enabled: Bool = true) {
+            let item = NSMenuItem(title: title, action: enabled ? action : nil, keyEquivalent: "")
+            item.target = self
+            sub.addItem(item)
+        }
+        if let text = reminders.menuBarText {
+            sub.addItem(NSMenuItem(title: text, action: nil, keyEquivalent: ""))
+            sub.addItem(.separator())
+        }
+        switch reminders.pomodoro.phase {
+        case .idle:
+            add("開始番茄鐘（\(reminders.focusMinutes) 分鐘）", #selector(startFocus))
+        default:
+            add(reminders.pomodoro.pausedLeft == nil ? "暫停番茄鐘" : "繼續番茄鐘", #selector(togglePomodoro))
+            add("結束番茄鐘", #selector(stopPomodoro))
+        }
+        if reminders.countdown != nil {
+            add("取消倒數", #selector(cancelCountdown))
+        }
+        if reminders.waterEnabled {
+            add("喝了一杯水（今天 \(reminders.cupsToday) 杯）", #selector(drankWater))
+        }
+        sub.addItem(.separator())
+        add("提醒設定…", #selector(openReminders))
+        let item = NSMenuItem(title: "專注與提醒", action: nil, keyEquivalent: "")
+        item.submenu = sub
+        return item
+    }
+
+    @objc private func openReminders() { remindersWindow.show() }
+    @objc private func startFocus() { reminders.startFocus(); reminders.onTick?() }
+    @objc private func togglePomodoro() { reminders.togglePausePomodoro(); reminders.onTick?() }
+    @objc private func stopPomodoro() { reminders.stopPomodoro(); reminders.onTick?() }
+    @objc private func cancelCountdown() { reminders.cancelCountdown(); reminders.onTick?() }
+    @objc private func drankWater() {
+        reminders.drankWater()
+        if !pet.concealed, pet.travel == .none, pet.canAct, !pet.isBusy { pet.interlude(.eat, duration: 2) }
+        pet.speech.sayText("今天第 \(reminders.cupsToday) 杯 💧")
+    }
+
     @objc private func performAction(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let action = PetAction(rawValue: raw) else { return }
         setEverythingConcealed(false)
@@ -248,7 +359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // 按住家具往下拉：收起來；往上拉：開小工具——電腦桌是計算機，餐桌是叫她來吃飯（算一次餵食），
-    // 床是關閉螢幕，床頭櫃是系統資訊。
+    // 床是關閉螢幕，床頭櫃是系統資訊，時鐘是番茄鐘。
     private func setUpPropGestures() {
         for prop in scenery.all {
             prop.window.onSwipeDown = { [weak self, unowned prop] in
@@ -267,6 +378,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         scenery.monitor.window.onSwipeUp = { [weak self] in
             guard let self else { return }
             self.systemInfo.show(above: self.scenery.monitor.window.frame)
+        }
+        scenery.clock.window.onSwipeUp = { [weak self] in
+            guard let self else { return }
+            self.remindersWindow.show(tab: .pomodoro, below: self.scenery.clock.window.frame)
         }
         scenery.bed.window.onSwipeUp = {
             // 等往上伸的動畫彈回來再關，看起來比較順。
@@ -374,7 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func prop(under frame: NSRect) -> Prop? {
         let point = NSPoint(x: frame.midX, y: frame.minY + 20)
         return scenery.all.first { prop in
-            prop !== scenery.monitor && scenery.isShown(prop) && !prop.inUse && prop.window.isVisible
+            prop !== scenery.monitor && prop !== scenery.clock && scenery.isShown(prop) && !prop.inUse && prop.window.isVisible
                 && prop.window.frame.insetBy(dx: -6, dy: -24).contains(point)
         }
     }

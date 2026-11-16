@@ -40,6 +40,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>LSMinimumSystemVersion</key>   <string>13.0</string>
     <key>LSUIElement</key>              <true/>
     <key>NSHighResolutionCapable</key>  <true/>
+    <key>NSCalendarsUsageDescription</key><string>在行程開始前，讓她在旁邊提醒你。只讀取行程的時間和標題。</string>
+    <key>NSCalendarsFullAccessUsageDescription</key><string>在行程開始前，讓她在旁邊提醒你。只讀取行程的時間和標題。</string>
 </dict>
 </plist>
 PLIST

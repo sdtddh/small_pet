@@ -14,6 +14,9 @@ final class PetSpeech {
     var chatterCooldown: Double = 8
     private var lastSpokeAt: Double = -.infinity
 
+    // 安靜模式（番茄鐘專注中）：不自己碎念，你跟她互動時才說話。
+    var quiet = false
+
     // 寵物最新的位置，說話時用來擺放泡泡。
     private var petFrame: NSRect = .zero
 
@@ -46,6 +49,7 @@ final class PetSpeech {
     func say(_ category: String, chance: Double = 1, force: Bool = true) {
         guard Double.random(in: 0..<1) < chance else { return }
         if !force {
+            guard !quiet else { return }
             let now = CACurrentMediaTime()
             guard !bubble.isVisible, now - lastSpokeAt >= chatterCooldown else { return }
         }

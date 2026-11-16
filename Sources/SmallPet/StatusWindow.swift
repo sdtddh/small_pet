@@ -5,6 +5,7 @@
 //   權限：哪些功能需要 macOS 的權限、現在有沒有給、前往設定的按鈕
 import AppKit
 import SwiftUI
+import EventKit
 
 @MainActor
 final class StatusWindowController {
@@ -193,6 +194,14 @@ struct StatusView: View {
                 settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
             )
 
+            permissionCard(
+                title: "行事曆",
+                granted: Self.calendarAllowed,
+                features: ["行程開始前提醒你（在「專注與提醒 → 提醒設定 → 鬧鐘・行事曆」打開）"],
+                note: "只讀取今天行程的時間和標題，不會修改或傳到任何地方。不打開這個功能就不會詢問。",
+                settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars"
+            )
+
             VStack(alignment: .leading, spacing: 6) {
                 Text("不需要權限").font(.headline)
                 Label("跟著我點擊：偵測你在其他 App 點滑鼠", systemImage: "checkmark.circle")
@@ -204,6 +213,12 @@ struct StatusView: View {
             Spacer(minLength: 0)
         }
         .padding(.top, 8)
+    }
+
+    private static var calendarAllowed: Bool {
+        let status = EKEventStore.authorizationStatus(for: .event)
+        if #available(macOS 14, *) { return status == .fullAccess }
+        return status == .authorized
     }
 
     private func permissionCard(title: String, granted: Bool, features: [String], note: String, settingsURL: String) -> some View {

@@ -3322,7 +3322,45 @@ func drawMonitor(_ ctx: CGContext) {
     shape(ctx, rounded(28, 82, 8, 5, 1.5), hex(0x9AA0A6), lineWidth: 1.4)
 }
 
+// MARK: - 時鐘（番茄鐘）
+//
+// clock.png：掛在螢幕上方的番茄造型掛鐘，用一條繩子掛在頂端的小釘子上。
+// 時針、分針、秒針和番茄鐘剩下的時間（錶面上的扇形）會動，由程式（ClockFace.swift）畫在圖上面，
+// 所以這張圖只畫不會動的部分；錶面中心、半徑要跟 ClockFace 的常數一致。
+let clockWidth: CGFloat = 64, clockHeight: CGFloat = 78
+
+func drawClock(_ ctx: CGContext) {
+    let red = hex(0xE8604C), redDark = hex(0xC9483A), leaf = hex(0x6CC46A), leafDark = hex(0x4E9E4F)
+    // 釘子和掛繩
+    line(ctx, segment(CGPoint(x: 32, y: 74), CGPoint(x: 22, y: 58)), woodDark, width: 1.4)
+    line(ctx, segment(CGPoint(x: 32, y: 74), CGPoint(x: 42, y: 58)), woodDark, width: 1.4)
+    shape(ctx, ellipse(32, 74.5, 4.5, 4.5), hex(0x9AA0A6), lineWidth: 1.3)
+    // 番茄本體（稍微扁一點），下面一點陰影讓它圓圓的
+    shape(ctx, ellipse(32, 31, 56, 50), red, lineWidth: 1.9)
+    let shade = CGMutablePath()
+    shade.addArc(center: CGPoint(x: 32, y: 31), radius: 24, startAngle: .pi * 1.15, endAngle: .pi * 1.85, clockwise: false)
+    line(ctx, shade, redDark, width: 2.2)
+    // 亮面
+    shape(ctx, ellipse(14, 42, 5, 8), hex(0xFFFFFF, 0.55), stroke: false)
+    // 葉子（五片）和蒂頭
+    for (dx, dy, w, h) in [(-11, 55, 12, 5), (11, 55, 12, 5), (-6, 58, 9, 5), (6, 58, 9, 5)] as [(CGFloat, CGFloat, CGFloat, CGFloat)] {
+        shape(ctx, ellipse(32 + dx, dy, w, h), leaf, lineWidth: 1.3)
+    }
+    shape(ctx, rounded(30, 56, 4, 6, 1.5), leafDark, lineWidth: 1.3)
+    // 錶面
+    shape(ctx, ellipse(32, 30, 36, 36), hex(0xFFF8E8), lineWidth: 1.6)
+    // 刻度：12 / 3 / 6 / 9 長一點
+    let c = CGPoint(x: 32, y: 30)
+    for i in 0..<12 {
+        let a = CGFloat.pi / 2 - CGFloat(i) * .pi / 6
+        let inner: CGFloat = i % 3 == 0 ? 12.5 : 14.2
+        line(ctx, segment(CGPoint(x: c.x + cos(a) * inner, y: c.y + sin(a) * inner),
+                          CGPoint(x: c.x + cos(a) * 16, y: c.y + sin(a) * 16)), outline, width: i % 3 == 0 ? 1.3 : 0.9)
+    }
+}
+
 if previewFrames == nil {
+try write(renderPNG(width: clockWidth, height: clockHeight, offset: 0) { drawClock($0) }, "props/clock.png")
 try write(renderPNG(height: canopyHeight, offset: 0) { drawCanopy($0) }, "props/parachute.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: false) }, "props/dining.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: true) }, "props/dining_meal.png")
@@ -3335,7 +3373,7 @@ for (part, name) in [(PlanePart.parked, "plane"), (.back, "plane_back"), (.front
     try write(renderPNG(width: planeWidth, height: planeHeight) { drawPlane($0, part) }, "props/\(name).png")
 }
 try write(renderPNG(width: monitorWidth, height: monitorHeight, offset: 0) { drawMonitor($0) }, "props/monitor.png")
-count += 14
+count += 15
 }
 
 // 外觀圖層：每種髮型畫 hairBehind / head，每套服裝畫 base / top，各自獨立，App 再疊起來。
