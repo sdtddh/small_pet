@@ -138,12 +138,16 @@ final class SystemMonitor: ObservableObject {
         }
     }
 
+    // 自己這個行程的 task port：只拿一次一直用（每呼叫一次 task_self_trap 就多一個 port 參照）。
+    // 不直接用 mach_task_self_，因為 Swift 6.0 會把它當成不安全的共用變數而編譯失敗。
+    private static let ownTask = task_self_trap()
+
     private func readOwn(into s: inout SystemSnapshot) {
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+                task_info(Self.ownTask, task_flavor_t(TASK_VM_INFO), $0, &count)
             }
         }
         if result == KERN_SUCCESS { s.ownMemory = info.phys_footprint }
