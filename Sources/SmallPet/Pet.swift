@@ -394,10 +394,30 @@ final class Pet {
             if frame == Self.attackImpactFrame, lastAttackFrame != frame { onAttackHit?() }
             lastAttackFrame = frame
         }
-        window.setFrameOrigin(NSPoint(x: posX, y: posY))
-        canopy.setOpen(action == .parachute, above: window.frame)
-        speech.follow(window.frame)
+        // 位置沒變就不要動視窗：每次 setFrameOrigin 都要通知系統的視窗伺服器，站著不動時每秒 60 次是白做。
+        let origin = NSPoint(x: posX, y: posY)
+        // 跟「上次自己擺的位置」比，不跟 window.frame 比：系統可能把視窗座標取整，比 window.frame 會一直以為有動。
+        // 別的地方直接搬過視窗（被拖、出門回家）的話，window.frame 會和上次擺的不一樣，也要再擺一次。
+        let moved = origin != placedOrigin || window.frame.origin != placedFrameOrigin
+        if moved {
+            window.setFrameOrigin(origin)
+            placedOrigin = origin
+            placedFrameOrigin = window.frame.origin
+        }
+        if action == .parachute || canopy.isVisible { canopy.setOpen(action == .parachute, above: window.frame) }
+        if window.frame != followedFrame {
+            followedFrame = window.frame
+            speech.follow(window.frame)
+        }
+        isStill = !moved && !isDragging && onGround && action != .fly
     }
+
+    // 上一幀她有沒有在動（位置有變、被拖著、在空中、在開飛機）。AppDelegate 看這個決定動畫要更新多快。
+    // 站著、坐著、睡覺、打字、跳舞、打 boss 時，動畫一秒最多換 9～10 格，不用每秒更新 60 次。
+    private(set) var isStill = false
+    private var followedFrame = NSRect.zero   // 對話泡泡上次跟著的位置
+    private var placedOrigin = NSPoint(x: CGFloat.nan, y: CGFloat.nan)   // tick 上次擺視窗的位置
+    private var placedFrameOrigin = NSPoint.zero                          // 擺完之後視窗實際的位置
 
     private func updateGroundAction(t: CGFloat, minX: CGFloat, maxX: CGFloat) {
         if travel != .none { return updateTravel(t: t, minX: minX, maxX: maxX) }

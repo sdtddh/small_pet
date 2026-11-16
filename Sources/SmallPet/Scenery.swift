@@ -31,6 +31,18 @@ final class Scenery {
     private let planeBack: NSImage?
     private let propellerFrames: [NSImage?]
     private var planeHome: NSPoint?     // 飛行中，飛機原本停的位置
+    // 上次檢查視窗前後順序的時間。問 orderedIndex 要跟系統的視窗伺服器整理一次全部視窗，很貴，
+    // 每一幀都問會讓 SmallPet 和 WindowServer 一直吃 CPU；隔一小段時間檢查一次就夠了。
+    private var lastOrderCheck: Double = 0
+    private static let orderCheckInterval: Double = 0.25
+
+    // 該不該再檢查一次視窗順序（距離上次夠久了）。
+    private func orderCheckDue() -> Bool {
+        let now = CACurrentMediaTime()
+        guard now - lastOrderCheck >= Self.orderCheckInterval else { return false }
+        lastOrderCheck = now
+        return true
+    }
     var all: [Prop] { [dining, computer, bed, monitor, plane] }
 
     // 家具總開關（選單切換）。打開時只顯示有勾選的那幾件（Prop.enabled）。
@@ -146,9 +158,9 @@ final class Scenery {
             plane.window.setImage(planeBack)
             if plane.window.isVisible { planeFront.order(.above, relativeTo: window.windowNumber) }
         }
-        // 飛行中點到她（或飛機），被點的視窗會跳到最前面，她就穿出機身。每一幀檢查三層的順序，亂了就排回去：
+        // 飛行中點到她（或飛機），被點的視窗會跳到最前面，她就穿出機身。每 0.25 秒檢查一次三層的順序，亂了就排回去：
         // 後層 < 她 < 前層（orderedIndex 越小越前面）。
-        if plane.window.isVisible {
+        if plane.window.isVisible, !planeFront.isVisible || orderCheckDue() {
             if plane.window.orderedIndex < window.orderedIndex { plane.window.order(.below, relativeTo: window.windowNumber) }
             if !planeFront.isVisible || planeFront.orderedIndex > window.orderedIndex {
                 planeFront.order(.above, relativeTo: window.windowNumber)
@@ -179,7 +191,7 @@ final class Scenery {
             return
         }
         blanket.setFrameOrigin(bed.window.frame.origin)
-        if !blanket.isVisible || blanket.orderedIndex > window.orderedIndex {
+        if !blanket.isVisible || (orderCheckDue() && blanket.orderedIndex > window.orderedIndex) {
             blanket.order(.above, relativeTo: window.windowNumber)
         }
     }

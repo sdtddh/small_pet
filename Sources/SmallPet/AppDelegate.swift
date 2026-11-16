@@ -562,23 +562,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - 動畫迴圈
 
-    private func startAnimating() {
-        // 約 60 FPS 更新一次。用實際經過的時間計算，就算掉幀速度也一致。
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+    // 動畫更新頻率：她在動（走路、跑、被拖、在空中、開飛機）時每秒 60 次，畫面才順；
+    // 站著、坐著、睡覺、打字、跳舞、打 boss 時，圖一秒最多換 10 格左右，每秒 20 次就夠，省下大部分 CPU。
+    private static let movingInterval = 1.0 / 60.0
+    private static let stillInterval = 1.0 / 20.0
+    private static let stillDelay = 0.5   // 停下來這麼久才降速，避免走走停停時一直切換
+    private var stillSince: Double?
+
+    private func startAnimating(interval: Double = movingInterval) {
+        timer?.invalidate()
+        // 用實際經過的時間計算，就算掉幀或降速，速度也一致。
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let now = CACurrentMediaTime()
-                let dt = min(now - self.lastTick, 1.0 / 20.0)   // 避免卡頓後瞬移
+                let dt = min(now - self.lastTick, 1.0 / 10.0)   // 避免卡頓後瞬移
                 self.lastTick = now
-                guard !self.pet.concealed else { return }   // 藏起來時暫停；冒險時間到了等顯示回來才回家
-                self.pet.tick(dt: dt)
-                self.updateBoss()
-                self.checkRun()
-                self.checkProps()
+                if !self.pet.concealed {   // 藏起來時暫停；冒險時間到了等顯示回來才回家
+                    self.pet.tick(dt: dt)
+                    self.updateBoss()
+                    self.checkRun()
+                    self.checkProps()
+                }
+                self.adjustFrameRate(now: now)
             }
         }
         // .common 模式：打開選單、拖曳時動畫也不會停。
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
+    }
+
+    // 她靜止一陣子（或藏起來）就降到每秒 20 次；一動起來馬上回到 60 次。
+    private func adjustFrameRate(now: Double) {
+        let still = pet.concealed || pet.isStill
+        if still { stillSince = stillSince ?? now } else { stillSince = nil }
+        let wanted = still && now - (stillSince ?? now) >= Self.stillDelay ? Self.stillInterval : Self.movingInterval
+        if let timer, timer.timeInterval != wanted { startAnimating(interval: wanted) }
     }
 }
