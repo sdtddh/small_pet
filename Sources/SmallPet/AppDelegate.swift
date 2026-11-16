@@ -239,7 +239,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         leaveHiddenProps()
     }
 
-    // 按住家具往下拉：收起來；往上拉：開小工具——電腦桌是計算機，餐桌是叫她來吃飯（算一次餵食）。
+    // 按住家具往下拉：收起來；往上拉：開小工具——電腦桌是計算機，餐桌是叫她來吃飯（算一次餵食），
+    // 床是關閉螢幕。
     private func setUpPropGestures() {
         for prop in scenery.all {
             prop.window.onSwipeDown = { [weak self, unowned prop] in
@@ -255,6 +256,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self, self.pet.travel == .none else { return }   // 出門冒險 / 打 boss 時不能吃
             self.feed()
         }
+        scenery.bed.window.onSwipeUp = {
+            // 等往上伸的動畫彈回來再關，看起來比較順。
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { Self.turnOffDisplay() }
+        }
+    }
+
+    // 關閉螢幕：電腦還醒著（下載、音樂照跑），動一下滑鼠就亮。用 macOS 內建的 pmset，不需要任何權限。
+    private static func turnOffDisplay() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        task.arguments = ["displaysleepnow"]
+        task.standardOutput = FileHandle.nullDevice
+        do { try task.run() } catch { NSLog("關閉螢幕失敗：\(error)") }
     }
 
     // 她正在用的電腦桌、床或飛機被隱藏了（開飛機時會直接掉下來，夠高就開傘）：不用了，家具才會馬上收起來。
