@@ -217,6 +217,11 @@ final class Scenery {
         } else {
             planeFront.orderOut(nil)
         }
+        // 棉被平常由 updateBed 每一幀擺好，但 ⌥F 藏起來時動畫迴圈暫停，不會再呼叫 updateBed，
+        // 所以床收起來時這裡要一起收；顯示回來後下一幀 updateBed 會再把棉被蓋回去。
+        if !bed.window.isVisible {
+            blanket.orderOut(nil)
+        }
     }
 }
 
