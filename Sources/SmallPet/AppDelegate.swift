@@ -465,6 +465,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // 每一幀：血條跟著冒險進度往下掉。
     private func updateBoss() {
         guard let boss else { return }
+        // 地面高度變了（Dock 出現 / 隱藏、換螢幕）就跟著貼地，跟她站在同一條線上
+        if let floor = NSScreen.main?.visibleFrame.minY, boss.frame.minY != floor {
+            boss.setFrameOrigin(NSPoint(x: boss.frame.minX, y: floor))
+        }
         if let trial {
             let total = trial.endsAt.timeIntervalSince(trial.startedAt)
             boss.update(progress: 1 - trial.endsAt.timeIntervalSinceNow / total, time: CACurrentMediaTime())

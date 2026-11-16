@@ -345,7 +345,15 @@ final class Pet {
         let minX = visible.minX
         let maxX = visible.maxX - size.width
 
-        if isDragging {
+        if travel == .fighting {
+            // 打 boss 時釘在地上一直揮劍。地面高度變了（Dock 出現 / 隱藏、換螢幕）也只是跟著貼地，
+            // 不會掉下來落地——落地會把動作換回發呆，boss 就只剩她站著不動。
+            // 萬一有別的地方把動作換掉了，也馬上換回揮劍。
+            posY = ground
+            vx = 0
+            vy = 0
+            if action != .attack { setAction(.attack); lastAttackFrame = -1 }
+        } else if isDragging {
             // 位置由 dragMoved 直接決定，這裡什麼都不做。
         } else if action == .fly {
             updateFlight(t: t, visible: visible)
