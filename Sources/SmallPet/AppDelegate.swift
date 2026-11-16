@@ -229,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    // 掛鐘：指針走現在的時間；番茄鐘進行中，錶面畫出剩下的時間。
+    // 時鐘：指針走現在的時間；番茄鐘進行中，錶面畫出剩下的時間。
     private func updateClockFace() {
         var remaining: ClockFace.Remaining?
         if let left = reminders.pomodoroLeft() {
@@ -381,7 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         scenery.clock.window.onSwipeUp = { [weak self] in
             guard let self else { return }
-            self.remindersWindow.show(tab: .pomodoro, below: self.scenery.clock.window.frame)
+            self.remindersWindow.show(tab: .pomodoro, above: self.scenery.clock.window.frame)
         }
         scenery.bed.window.onSwipeUp = {
             // 等往上伸的動畫彈回來再關，看起來比較順。

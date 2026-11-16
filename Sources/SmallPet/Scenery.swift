@@ -1,6 +1,6 @@
-// Scenery.swift —— 桌面上的家具佈景：餐桌、電腦桌、床、床頭櫃、飛機，和掛在螢幕上方的時鐘。
+// Scenery.swift —— 桌面上的家具佈景：餐桌、電腦桌、床、床頭櫃、飛機、時鐘。
 //
-// 每件家具是獨立的透明視窗，擺在螢幕底部（時鐘掛在螢幕上方）、寵物後面。按住家具：
+// 每件家具是獨立的透明視窗，擺在螢幕底部、寵物後面。按住家具：
 //   - 左右拖：移動（位置會記住）
 //   - 往下拉：收起來（等於在選單取消勾選這件）
 //   - 往上拉：打開這件家具的小工具（電腦桌是計算機，床是關閉螢幕，床頭櫃是系統資訊，時鐘是番茄鐘）；還沒有小工具的家具會彈一下
@@ -10,7 +10,7 @@
 //   - 電腦桌、床、飛機：家具顯示時，她閒著會自己過去打電腦、上床睡覺、開飛機。
 //     床分成兩層：床架、枕頭在她後面，她躺好後棉被（另一個視窗）蓋在她前面。
 //     床頭櫃：上面的儀表顯示 CPU 用量和記憶體壓力（見 SystemMonitor.swift），她不會去用。
-//     時鐘：番茄造型的掛鐘，指針走真正的時間；番茄鐘進行中，錶面會出現剩下時間的扇形（見 ClockFace.swift）。
+//     時鐘：從土裡長出來的番茄，番茄上是錶面，指針走真正的時間；番茄鐘進行中，錶面會出現剩下時間的扇形（見 ClockFace.swift）。
 //     飛機分成兩個視窗夾住寵物：後層在她後面、前層（機身、螺旋槳）在她前面，看起來就像坐在駕駛艙裡。
 //
 // 圖片用的座標跟寵物畫布一樣，所以寵物視窗的 x 對齊家具視窗的 x，她就剛好坐在凳子 / 座板上。
@@ -73,8 +73,8 @@ final class Scenery {
         gauge = SystemGauge(on: monitor.window)
         plane = Prop(sprites: sprites, title: "飛機", name: "plane", activeName: nil, key: "scenery.plane.x",
                      defaultX: mid + 420, sink: Self.planeMargin)
-        clock = Prop(sprites: sprites, title: "時鐘（番茄鐘）", name: "clock", activeName: nil, key: "scenery.clock.x",
-                     defaultX: mid - 32, onTop: true)
+        clock = Prop(sprites: sprites, title: "時鐘（番茄鐘）", name: "clock", activeName: nil, key: "scenery.clock.ground.x",
+                     defaultX: mid - 150)
         clockFace = ClockFace(on: clock.window)
         blanket = SceneryWindow(image: sprites.prop("bed_front"))
         blanket.ignoresMouseEvents = true
@@ -254,13 +254,10 @@ final class Prop {
 
     // sink：視窗要比地面低多少（圖下方有留白的家具，例如飛機）。
     private let sink: CGFloat
-    // onTop：掛在螢幕上方（選單列下面），不是擺在地上（時鐘）。
-    private let onTop: Bool
 
-    init(sprites: SpriteLibrary, title: String, name: String, activeName: String?, key: String, defaultX: CGFloat, sink: CGFloat = 0, onTop: Bool = false) {
+    init(sprites: SpriteLibrary, title: String, name: String, activeName: String?, key: String, defaultX: CGFloat, sink: CGFloat = 0) {
         self.title = title
         self.sink = sink
-        self.onTop = onTop
         enabledKey = "scenery.enabled.\(name)"
         enabled = UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
         image = sprites.prop(name)
@@ -274,7 +271,7 @@ final class Prop {
         clampToScreen()
     }
 
-    // 換螢幕或 Dock 變高時，貼回地面（時鐘貼回上緣）、別超出畫面。
+    // 換螢幕或 Dock 變高時，貼回地面、別超出畫面。
     func clampToScreen() {
         guard let visible = NSScreen.main?.visibleFrame else { return }
         let x = min(max(window.frame.minX, visible.minX), visible.maxX - window.frame.width)
@@ -283,7 +280,7 @@ final class Prop {
     }
 
     private func baseY(in visible: NSRect) -> CGFloat {
-        onTop ? visible.maxY - window.frame.height : visible.minY - sink
+        visible.minY - sink
     }
 }
 

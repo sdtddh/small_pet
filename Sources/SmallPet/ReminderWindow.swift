@@ -161,8 +161,8 @@ final class RemindersWindowController {
         self.center = center
     }
 
-    // tab：要打開哪一頁（nil = 上次那頁）；below：時鐘的位置，視窗開在它正下方（nil = 螢幕中間）。
-    func show(tab: RemindersNav.Tab? = nil, below anchor: NSRect? = nil) {
+    // tab：要打開哪一頁（nil = 上次那頁）；above：時鐘的位置，視窗開在它正上方（nil = 螢幕中間）。
+    func show(tab: RemindersNav.Tab? = nil, above anchor: NSRect? = nil) {
         if let tab { nav.tab = tab }
         if window == nil {
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 470),
@@ -176,7 +176,7 @@ final class RemindersWindowController {
         if let anchor, let window, let visible = NSScreen.main?.visibleFrame {
             let size = window.frame.size
             let x = min(max(anchor.midX - size.width / 2, visible.minX), visible.maxX - size.width)
-            let y = max(anchor.minY - 8 - size.height, visible.minY)
+            let y = min(anchor.maxY + 8, visible.maxY - size.height)
             window.setFrameOrigin(NSPoint(x: x, y: y))
         }
         center.refreshCalendarAccess()

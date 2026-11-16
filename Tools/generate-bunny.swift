@@ -3326,33 +3326,66 @@ func drawMonitor(_ ctx: CGContext) {
 
 // MARK: - 時鐘（番茄鐘）
 //
-// clock.png：掛在螢幕上方的番茄造型掛鐘，用一條繩子掛在頂端的小釘子上。
+// clock.png：從土裡長出來的番茄掛鐘。一小堆土，冒出一根番茄莖（兩片葉子），莖頂端結了一顆番茄，番茄上是錶面。
 // 時針、分針、秒針和番茄鐘剩下的時間（錶面上的扇形）會動，由程式（ClockFace.swift）畫在圖上面，
 // 所以這張圖只畫不會動的部分；錶面中心、半徑要跟 ClockFace 的常數一致。
-let clockWidth: CGFloat = 64, clockHeight: CGFloat = 78
+let clockWidth: CGFloat = 64, clockHeight: CGFloat = 96
 
 func drawClock(_ ctx: CGContext) {
     let red = hex(0xE8604C), redDark = hex(0xC9483A), leaf = hex(0x6CC46A), leafDark = hex(0x4E9E4F)
-    // 釘子和掛繩
-    line(ctx, segment(CGPoint(x: 32, y: 74), CGPoint(x: 22, y: 58)), woodDark, width: 1.4)
-    line(ctx, segment(CGPoint(x: 32, y: 74), CGPoint(x: 42, y: 58)), woodDark, width: 1.4)
-    shape(ctx, ellipse(32, 74.5, 4.5, 4.5), hex(0x9AA0A6), lineWidth: 1.3)
+    let soil = hex(0x8A5A3B), soilDark = hex(0x6B4329)
+    // 一片葉子：以 (x, y) 為葉柄，往 angle 方向長出去
+    func stemLeaf(_ x: CGFloat, _ y: CGFloat, angle: CGFloat, length: CGFloat) {
+        ctx.saveGState()
+        ctx.translateBy(x: x, y: y)
+        ctx.rotate(by: angle)
+        let p = CGMutablePath()
+        p.move(to: .zero)
+        p.addQuadCurve(to: CGPoint(x: length, y: 0), control: CGPoint(x: length * 0.45, y: length * 0.42))
+        p.addQuadCurve(to: .zero, control: CGPoint(x: length * 0.45, y: -length * 0.42))
+        shape(ctx, p, leaf, lineWidth: 1.3)
+        line(ctx, segment(CGPoint(x: 1.5, y: 0), CGPoint(x: length * 0.8, y: 0)), leafDark, width: 0.8)
+        ctx.restoreGState()
+    }
+
+    // 莖：從土裡彎彎地長上來，接到番茄底下
+    let stem = quad(pt(31, 8), pt(32, 40), pt(36, 24))
+    line(ctx, stem, outline, width: 5)
+    line(ctx, stem, leafDark, width: 3)
+    stemLeaf(33.2, 20, angle: .pi * 0.88, length: 15)
+    stemLeaf(34.6, 28, angle: .pi * 0.12, length: 13)
+
+    // 一小堆土，上面有幾顆小石頭和小草
+    let mound = CGMutablePath()
+    mound.move(to: pt(5, 0))
+    mound.addQuadCurve(to: pt(32, 13), control: pt(10, 12))
+    mound.addQuadCurve(to: pt(59, 0), control: pt(54, 12))
+    mound.closeSubpath()
+    shape(ctx, mound, soil, lineWidth: 1.8)
+    for (x, y, r) in [(18, 5, 1.6), (27, 3, 1.2), (41, 6, 1.4), (47, 3, 1.1), (35, 9, 1.0)] as [(CGFloat, CGFloat, CGFloat)] {
+        shape(ctx, ellipse(x, y, r * 2, r * 1.6), soilDark, stroke: false)
+    }
+    for (x, lean) in [(13, -1), (51, 1)] as [(CGFloat, CGFloat)] {
+        line(ctx, quad(pt(x, 6), pt(x + lean * 3, 12), pt(x + lean * 0.5, 10)), leafDark, width: 1.2)
+        line(ctx, quad(pt(x + 1.5, 6), pt(x + 1.5 + lean * 1.5, 11), pt(x + 1.5, 9)), leaf, width: 1.1)
+    }
+
     // 番茄本體（稍微扁一點），下面一點陰影讓它圓圓的
-    shape(ctx, ellipse(32, 31, 56, 50), red, lineWidth: 1.9)
+    let c = CGPoint(x: 32, y: 61)
+    shape(ctx, ellipse(32, 62, 56, 50), red, lineWidth: 1.9)
     let shade = CGMutablePath()
-    shade.addArc(center: CGPoint(x: 32, y: 31), radius: 24, startAngle: .pi * 1.15, endAngle: .pi * 1.85, clockwise: false)
+    shade.addArc(center: CGPoint(x: 32, y: 62), radius: 24, startAngle: .pi * 1.15, endAngle: .pi * 1.85, clockwise: false)
     line(ctx, shade, redDark, width: 2.2)
     // 亮面
-    shape(ctx, ellipse(14, 42, 5, 8), hex(0xFFFFFF, 0.55), stroke: false)
-    // 葉子（五片）和蒂頭
-    for (dx, dy, w, h) in [(-11, 55, 12, 5), (11, 55, 12, 5), (-6, 58, 9, 5), (6, 58, 9, 5)] as [(CGFloat, CGFloat, CGFloat, CGFloat)] {
+    shape(ctx, ellipse(14, 73, 5, 8), hex(0xFFFFFF, 0.55), stroke: false)
+    // 頂上的葉子和蒂頭
+    for (dx, dy, w, h) in [(-11, 86, 12, 5), (11, 86, 12, 5), (-6, 89, 9, 5), (6, 89, 9, 5)] as [(CGFloat, CGFloat, CGFloat, CGFloat)] {
         shape(ctx, ellipse(32 + dx, dy, w, h), leaf, lineWidth: 1.3)
     }
-    shape(ctx, rounded(30, 56, 4, 6, 1.5), leafDark, lineWidth: 1.3)
+    shape(ctx, rounded(30, 87, 4, 6, 1.5), leafDark, lineWidth: 1.3)
     // 錶面
-    shape(ctx, ellipse(32, 30, 36, 36), hex(0xFFF8E8), lineWidth: 1.6)
+    shape(ctx, ellipse(c.x, c.y, 36, 36), hex(0xFFF8E8), lineWidth: 1.6)
     // 刻度：12 / 3 / 6 / 9 長一點
-    let c = CGPoint(x: 32, y: 30)
     for i in 0..<12 {
         let a = CGFloat.pi / 2 - CGFloat(i) * .pi / 6
         let inner: CGFloat = i % 3 == 0 ? 12.5 : 14.2

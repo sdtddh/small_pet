@@ -1,6 +1,6 @@
-// ClockFace.swift —— 掛鐘（家具「時鐘」）會動的部分：時針、分針、秒針，和番茄鐘剩下的時間。
+// ClockFace.swift —— 家具「時鐘」（從土裡長出來的番茄）會動的部分：時針、分針、秒針，和番茄鐘剩下的時間。
 //
-// 時鐘的圖（Resources/props/clock.png，Tools/generate-bunny.swift 的 drawClock）只畫不會動的番茄外殼和錶面；
+// 時鐘的圖（Resources/props/clock.png，Tools/generate-bunny.swift 的 drawClock）只畫不會動的土、莖、番茄和錶面；
 // 這裡把指針疊在上面。錶面中心、半徑要跟 drawClock 一致。
 //
 // 番茄鐘 / 倒數進行中，錶面會出現一塊扇形：從 12 點順時針鋪出剩下的分鐘數（一圈 = 60 分鐘），
@@ -17,7 +17,7 @@ final class ClockFace {
         let paused: Bool
     }
 
-    private static let center = CGPoint(x: 32, y: 30)
+    private static let center = CGPoint(x: 32, y: 61)
     private static let radius: CGFloat = 16.5
     private static let outline = CGColor(srgbRed: 0x2B / 255, green: 0x22 / 255, blue: 0x30 / 255, alpha: 1)
 
