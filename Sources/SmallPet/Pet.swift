@@ -23,8 +23,6 @@ final class Pet {
         var parachuteHeight: CGFloat = 0.5  // 往下掉時離地超過螢幕高度的這個比例，就開傘
         var parachuteSpeed: CGFloat = 70    // 開傘後的下降速度：點/秒
         var parachuteDrag: CGFloat = 3      // 開傘後速度收斂的快慢（越大越快變慢）
-        var flySpeed: CGFloat = 200         // 飛機巡航速度：點/秒
-        var flyAltitude: CGFloat = 0.45     // 巡航高度：螢幕高度的比例（上下再飄 50 點）
     }
     var tuning = Tuning()
 
@@ -66,13 +64,6 @@ final class Pet {
     private var walkFacing: CGFloat = 1
     private var afterWalk: (() -> Void)?
 
-    // 開飛機：滑行 → 起飛 → 在天上飄（碰到螢幕邊就掉頭）→ 時間到從左邊進場，降落滑回停機位。
-    private enum FlightPhase { case taxi, air, landing(distance: CGFloat, altitude: CGFloat) }
-    private var flightPhase = FlightPhase.taxi
-    private var flightHome: CGFloat = 0
-    private var flightSpeed: CGFloat = 0
-    // 機頭仰角（弧度，正值往上），給飛機的圖傾斜用。
-    private(set) var flightPitch: CGFloat = 0
     var facingLeft: Bool { direction < 0 }
 
     // 自動模式換動作時，有 outingChance 的機率先問 onOuting 要不要去哪裡
@@ -182,7 +173,6 @@ final class Pet {
         guard canAct else { return }
         setAction(newAction)
         if let duration { actionDuration = duration }
-        if newAction == .fly { beginFlight() }
         isInterlude = true
         afterInterlude = done
     }
@@ -203,7 +193,7 @@ final class Pet {
         }
     }
 
-    // 放下手邊的事（走去家具、打電腦、睡床、開飛機）。在飛機上的話會掉回地面。
+    // 放下手邊的事（走去家具、打電腦、睡床）。
     func stopBusy() {
         guard isBusy else { return }
         setAction(.fall)
@@ -266,7 +256,7 @@ final class Pet {
     }
 
     // 每按一次跳一格：你按越快她跳越快，停手 1.5 秒後回去做原本的事。
-    // 睡覺、被抓、在空中、出門、正在忙（走去吃飯、上床睡覺、開飛機、升等跳舞…）時不打擾她。回傳有沒有跳。
+    // 睡覺、被抓、在空中、出門、正在忙（走去吃飯、上床睡覺、升等跳舞…）時不打擾她。回傳有沒有跳。
     @discardableResult
     private func danceStep() -> Bool {
         if action == .dance, syncDancing {
@@ -355,8 +345,6 @@ final class Pet {
             if action != .attack { setAction(.attack); lastAttackFrame = -1 }
         } else if isDragging {
             // 位置由 dragMoved 直接決定，這裡什麼都不做。
-        } else if action == .fly {
-            updateFlight(t: t, visible: visible)
         } else if !onGround {
             // 在空中：從夠高的地方往下掉就開傘。
             if action == .fall, vy < 0, posY - ground > visible.height * tuning.parachuteHeight {
@@ -394,7 +382,7 @@ final class Pet {
             if frame == Self.attackImpactFrame, lastAttackFrame != frame { onAttackHit?() }
             lastAttackFrame = frame
         }
-        // 位置沒變就不要動視窗：每次 setFrameOrigin 都要通知系統的視窗伺服器，站著不動時每秒 60 次是白做。
+        // 位置沒變就不要動視窗：每次 setFrameOrigin 都要通知系統的視窗伺服器，站著不動時每秒 20 次都是白做。
         let origin = NSPoint(x: posX, y: posY)
         // 跟「上次自己擺的位置」比，不跟 window.frame 比：系統可能把視窗座標取整，比 window.frame 會一直以為有動。
         // 別的地方直接搬過視窗（被拖、出門回家）的話，window.frame 會和上次擺的不一樣，也要再擺一次。
@@ -409,11 +397,11 @@ final class Pet {
             followedFrame = window.frame
             speech.follow(window.frame)
         }
-        isStill = !moved && !isDragging && onGround && action != .fly
+        isStill = !moved && !isDragging && onGround
     }
 
-    // 上一幀她有沒有在動（位置有變、被拖著、在空中、在開飛機）。AppDelegate 看這個決定動畫要更新多快。
-    // 站著、坐著、睡覺、打字、跳舞、打 boss 時，動畫一秒最多換 9～10 格，不用每秒更新 60 次。
+    // 上一幀她有沒有在動（位置有變、被拖著、在空中）。AppDelegate 看這個決定動畫要更新多快。
+    // 站著、坐著、睡覺、打字、跳舞、打 boss 時，動畫一秒最多換 9～10 格，不用跟移動時一樣每秒更新 30 次。
     private(set) var isStill = false
     private var followedFrame = NSRect.zero   // 對話泡泡上次跟著的位置
     private var placedOrigin = NSPoint(x: CGFloat.nan, y: CGFloat.nan)   // tick 上次擺視窗的位置
@@ -470,63 +458,6 @@ final class Pet {
         } else if autoMode, actionTime >= actionDuration {
             pickNextAction()
         }
-    }
-
-    private func beginFlight() {
-        flightHome = posX
-        flightPhase = .taxi
-        flightSpeed = 0
-        flightPitch = 0
-        // 飛機停著時機頭朝右；右邊空間不夠就往左滑行起飛
-        let right = (NSScreen.main?.visibleFrame.maxX ?? .infinity) - size.width
-        direction = right - posX > 400 ? 1 : -1
-    }
-
-    private func updateFlight(t: CGFloat, visible: NSRect) {
-        // 掉頭的位置可以稍微超出螢幕，像飛機真的繞出去再回來
-        let left = visible.minX - 120
-        let right = visible.maxX - size.width + 120
-        let oldY = posY
-        switch flightPhase {
-        case .taxi:
-            flightSpeed = min(tuning.flySpeed, flightSpeed + 160 * t)
-            posX += flightSpeed * direction * t
-            posY = ground
-            if flightSpeed >= 140 { flightPhase = .air }   // 速度夠了就拉起來
-        case .air:
-            flightSpeed = tuning.flySpeed
-            posX += flightSpeed * direction * t
-            if posX > right { direction = -1 }
-            if posX < left { direction = 1 }
-            let cruise = ground + visible.height * tuning.flyAltitude + 50 * CGFloat(sin(actionTime * 0.9))
-            posY += min(max((cruise - posY) * 1.5, -120), 120) * t
-            // 時間到了，等飛機朝右、離停機位夠遠，就開始進場
-            let distance = flightHome - posX
-            if actionTime >= actionDuration, direction > 0, distance >= min(350, flightHome - left - 5) {
-                flightPhase = .landing(distance: distance, altitude: posY - ground)
-                speech.say("landing", chance: 0.6, force: false)
-            }
-        case .landing(let distance0, let altitude0):
-            // 沿直線滑下來，離停機位 90 點時著地，再減速滑進停機位
-            let distance = flightHome - posX
-            let glide = max(0, (distance - 90) / max(1, distance0 - 90))
-            posY = ground + altitude0 * glide
-            flightSpeed = distance < 90 ? 30 + 170 * distance / 90 : tuning.flySpeed
-            posX += flightSpeed * t
-            if posX >= flightHome {
-                posX = flightHome
-                posY = ground
-                flightPitch = 0
-                let done = afterInterlude
-                finishAirAction()
-                done?()
-                return
-            }
-        }
-        // 機頭跟著爬升 / 下降的方向抬起或壓低，慢慢跟上，不要一頓一頓的
-        let climb = t > 0 ? (posY - oldY) / t : 0
-        let target = min(max(atan2(climb, max(flightSpeed, 1)), -0.18), 0.18)
-        flightPitch += (target - flightPitch) * min(1, 4 * t)
     }
 
     // MARK: - 地下城：砍 boss

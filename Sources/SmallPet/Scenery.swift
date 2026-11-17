@@ -1,4 +1,4 @@
-// Scenery.swift —— 桌面上的家具佈景：餐桌、電腦桌、床、床頭櫃、飛機、時鐘。
+// Scenery.swift —— 桌面上的家具佈景：餐桌、電腦桌、床、床頭櫃、時鐘。
 //
 // 每件家具是獨立的透明視窗，擺在螢幕底部、寵物後面。按住家具：
 //   - 左右拖：移動（位置會記住）
@@ -7,11 +7,10 @@
 // 選單的「家具與佈景」可以一起顯示 / 隱藏，也可以個別勾選要擺哪幾件。
 // ⌥F 是另一回事：把寵物和家具全部藏起來（見 AppDelegate.toggleEverything），勾選不會變。
 //   - 餐桌：餵食時盤子會放上胡蘿蔔，她自己走過來坐下吃；就算家具是隱藏的也會暫時出現，吃完再收起來。
-//   - 電腦桌、床、飛機：家具顯示時，她閒著會自己過去打電腦、上床睡覺、開飛機。
+//   - 電腦桌、床：家具顯示時，她閒著會自己過去打電腦、上床睡覺。
 //     床分成兩層：床架、枕頭在她後面，她躺好後棉被（另一個視窗）蓋在她前面。
 //     床頭櫃：上面的儀表顯示 CPU 用量和記憶體壓力（見 SystemMonitor.swift），她不會去用。
-//     時鐘：從土裡長出來的番茄，番茄上是錶面，指針走真正的時間；番茄鐘進行中，錶面會出現剩下時間的扇形（見 ClockFace.swift）。
-//     飛機分成兩個視窗夾住寵物：後層在她後面、前層（機身、螺旋槳）在她前面，看起來就像坐在駕駛艙裡。
+//     時鐘：從土裡長出來的番茄，或草地上的南瓜（外觀可以選，見 ClockLook），錶面上的指針走真正的時間；番茄鐘進行中，錶面會出現剩下時間的扇形（見 ClockFace.swift）。
 //
 // 圖片用的座標跟寵物畫布一樣，所以寵物視窗的 x 對齊家具視窗的 x，她就剛好坐在凳子 / 座板上。
 import AppKit
@@ -25,15 +24,9 @@ final class Scenery {
     let bed: Prop
     let monitor: Prop
     let gauge: SystemGauge
-    let plane: Prop
     let clock: Prop
     let clockFace: ClockFace
     private let blanket: SceneryWindow
-    private let planeFront: SceneryWindow
-    private let planeParked: NSImage?
-    private let planeBack: NSImage?
-    private let propellerFrames: [NSImage?]
-    private var planeHome: NSPoint?     // 飛行中，飛機原本停的位置
     // 上次檢查視窗前後順序的時間。問 orderedIndex 要跟系統的視窗伺服器整理一次全部視窗，很貴，
     // 每一幀都問會讓 SmallPet 和 WindowServer 一直吃 CPU；隔一小段時間檢查一次就夠了。
     private var lastOrderCheck: Double = 0
@@ -46,7 +39,7 @@ final class Scenery {
         lastOrderCheck = now
         return true
     }
-    var all: [Prop] { [dining, computer, bed, monitor, plane, clock] }
+    var all: [Prop] { [dining, computer, bed, monitor, clock] }
 
     // 家具總開關（選單切換）。打開時只顯示有勾選的那幾件（Prop.enabled）。
     private(set) var pinned: Bool {
@@ -63,7 +56,10 @@ final class Scenery {
         refresh(below: pet)
     }
 
+    private let sprites: SpriteLibrary
+
     init(sprites: SpriteLibrary) {
+        self.sprites = sprites
         let mid = NSScreen.main?.visibleFrame.midX ?? 0
         // 第一次的預設位置：電腦桌在左、餐桌在中間、床在右。
         dining = Prop(sprites: sprites, title: "餐桌", name: "dining", activeName: "dining_meal", key: "scenery.x", defaultX: mid - 70)
@@ -71,18 +67,11 @@ final class Scenery {
         bed = Prop(sprites: sprites, title: "床", name: "bed", activeName: "bed_back", key: "scenery.bed.x", defaultX: mid + 170)
         monitor = Prop(sprites: sprites, title: "床頭櫃（系統資訊）", name: "monitor", activeName: nil, key: "scenery.monitor.x", defaultX: mid + 330)
         gauge = SystemGauge(on: monitor.window)
-        plane = Prop(sprites: sprites, title: "飛機", name: "plane", activeName: nil, key: "scenery.plane.x",
-                     defaultX: mid + 420, sink: Self.planeMargin)
-        clock = Prop(sprites: sprites, title: "時鐘（番茄鐘）", name: "clock", activeName: nil, key: "scenery.clock.ground.x",
-                     defaultX: mid - 150)
+        clock = Prop(sprites: sprites, title: "時鐘（番茄鐘）", name: ClockLook.current.propName, activeName: nil,
+                     key: "scenery.clock.ground.x", defaultX: mid - 150)
         clockFace = ClockFace(on: clock.window)
         blanket = SceneryWindow(image: sprites.prop("bed_front"))
         blanket.ignoresMouseEvents = true
-        planeParked = sprites.prop("plane")
-        planeBack = sprites.prop("plane_back")
-        propellerFrames = [sprites.prop("plane_front_0"), sprites.prop("plane_front_1")]
-        planeFront = SceneryWindow(image: propellerFrames[0])
-        planeFront.ignoresMouseEvents = true
         pinned = UserDefaults.standard.bool(forKey: "scenery.visible")
     }
 
@@ -138,57 +127,6 @@ final class Scenery {
         all.forEach { release($0, below: pet) }
     }
 
-    // 飛機圖上下各多留的空間（generate-bunny.swift 的 planeMargin），和駕駛座的位置。
-    // 駕駛座：寵物畫布上她屁股的位置，飛機圖上同一點要再加 planeMargin。
-    static let planeMargin: CGFloat = 16
-    private static let seat = CGPoint(x: 58, y: 17)
-
-    // 每一幀呼叫：她坐進飛機後，飛機拆成前後兩層夾住她，跟著她走、轉向、傾斜，螺旋槳轉動；
-    // 下飛機（或被抓走）就停回原位、換回停著的圖。
-    // - rider：她的視窗；nil 代表她不在飛機上。
-    func updatePlane(rider window: NSWindow?, facingLeft: Bool, pitch: CGFloat, time: Double) {
-        guard let window, plane.inUse else {
-            if let home = planeHome {
-                planeHome = nil
-                planeFront.orderOut(nil)
-                plane.window.setImage(planeParked)
-                for w in [plane.window, planeFront] {
-                    w.setFrameOrigin(home)
-                    w.setArtTransform(.identity)
-                }
-            }
-            return
-        }
-        if planeHome == nil {
-            planeHome = plane.window.frame.origin
-            plane.window.setImage(planeBack)
-            if plane.window.isVisible { planeFront.order(.above, relativeTo: window.windowNumber) }
-        }
-        // 飛行中點到她（或飛機），被點的視窗會跳到最前面，她就穿出機身。每 0.25 秒檢查一次三層的順序，亂了就排回去：
-        // 後層 < 她 < 前層（orderedIndex 越小越前面）。
-        if plane.window.isVisible, !planeFront.isVisible || orderCheckDue() {
-            if plane.window.orderedIndex < window.orderedIndex { plane.window.order(.below, relativeTo: window.windowNumber) }
-            if !planeFront.isVisible || planeFront.orderedIndex > window.orderedIndex {
-                planeFront.order(.above, relativeTo: window.windowNumber)
-            }
-        }
-
-        // 圖以視窗中心為基準翻面、傾斜，再把視窗擺到「駕駛座剛好在她屁股下面」的位置。
-        let flip: CGFloat = facingLeft ? -1 : 1
-        let transform = CGAffineTransform(rotationAngle: pitch * flip).scaledBy(x: flip, y: 1)
-        let size = plane.window.frame.size
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let seat = CGPoint(x: Self.seat.x - center.x, y: Self.seat.y + Self.planeMargin - center.y).applying(transform)
-        let rider = window.frame
-        let riderSeat = CGPoint(x: rider.minX + (facingLeft ? rider.width - Self.seat.x : Self.seat.x), y: rider.minY + Self.seat.y)
-        let origin = NSPoint(x: riderSeat.x - center.x - seat.x, y: riderSeat.y - center.y - seat.y)
-        for w in [plane.window, planeFront] {
-            w.setFrameOrigin(origin)
-            w.setArtTransform(transform)
-        }
-        planeFront.setImage(propellerFrames[Int(time * 20) % propellerFrames.count])
-    }
-
     // 每一幀呼叫：她躺在床上時，棉被蓋在她前面（點到她、她的視窗跳到最前面時再蓋回去）；起床就收起來。
     // - sleeper：她的視窗；nil 代表她不在床上。
     func updateBed(sleeper window: NSWindow?) {
@@ -202,6 +140,12 @@ final class Scenery {
         }
     }
 
+    // 時鐘換外觀：換圖（大小不一樣，左下角不動）、錶面中心搬到新圖的位置。
+    func setClockLook(_ look: ClockLook) {
+        clock.replaceImage(sprites.prop(look.propName))
+        clockFace.move(to: look.faceCenter)
+    }
+
     private func refresh(below pet: NSWindow) {
         for prop in all {
             if !concealed, isShown(prop) || prop.inUse {
@@ -210,12 +154,6 @@ final class Scenery {
             } else {
                 prop.window.orderOut(nil)
             }
-        }
-        // 飛機前層只在她坐進去後出現（不然她走過飛機前面會被機身擋住）。
-        if plane.window.isVisible, planeHome != nil {
-            planeFront.order(.above, relativeTo: pet.windowNumber)
-        } else {
-            planeFront.orderOut(nil)
         }
         // 棉被平常由 updateBed 每一幀擺好，但 ⌥F 藏起來時動畫迴圈暫停，不會再呼叫 updateBed，
         // 所以床收起來時這裡要一起收；顯示回來後下一幀 updateBed 會再把棉被蓋回去。
@@ -232,7 +170,7 @@ final class Prop {
 
     let title: String
     let window: SceneryWindow
-    private let image: NSImage?
+    private var image: NSImage?
     private let activeImage: NSImage?
 
     // 她正在用（吃飯、打電腦、睡床）：換圖、不能拖、不能往下拉收起來（往上拉開小工具還是可以）。
@@ -252,7 +190,7 @@ final class Prop {
 
     var x: CGFloat { window.frame.minX }
 
-    // sink：視窗要比地面低多少（圖下方有留白的家具，例如飛機）。
+    // sink：視窗要比地面低多少（圖下方有留白的家具）。
     private let sink: CGFloat
 
     init(sprites: SpriteLibrary, title: String, name: String, activeName: String?, key: String, defaultX: CGFloat, sink: CGFloat = 0) {
@@ -268,6 +206,13 @@ final class Prop {
         let saved = UserDefaults.standard.object(forKey: key) as? Double
         window.setFrameOrigin(NSPoint(x: saved.map { CGFloat($0) } ?? defaultX, y: baseY(in: visible)))
         window.onMoved = { x in UserDefaults.standard.set(Double(x), forKey: key) }
+        clampToScreen()
+    }
+
+    // 換成另一張圖（時鐘換外觀用；這種家具沒有「使用中」的圖）。
+    func replaceImage(_ newImage: NSImage?) {
+        image = newImage
+        window.replaceImage(newImage)
         clampToScreen()
     }
 
@@ -295,7 +240,7 @@ final class SceneryWindow: NSWindow {
     var canSwipeDown = true
 
     private let imageView = NSView()
-    // 拉動時的回饋（往下沉、往上伸）套在 holder 上；圖片在 holder 裡的 art，才能整張翻面、傾斜（飛機用）。
+    // 拉動時的回饋（往下沉、往上伸）套在 holder 上；圖片在 holder 裡的 art，才能整張翻面、傾斜。
     private let holder = CALayer()
     private let art = CALayer()
 
@@ -336,6 +281,19 @@ final class SceneryWindow: NSWindow {
         art.contents = image
     }
 
+    // 換一張大小可能不同的圖（時鐘換外觀）：視窗和圖層一起改大小，左下角不動。
+    func replaceImage(_ image: NSImage?) {
+        let size = image.map { NSSize(width: $0.size.width / 2, height: $0.size.height / 2) } ?? NSSize(width: 1, height: 1)
+        setFrame(NSRect(origin: frame.origin, size: size), display: false)
+        imageView.frame = NSRect(origin: .zero, size: size)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        holder.frame = imageView.bounds
+        art.frame = holder.bounds
+        CATransaction.commit()
+        setImage(image)
+    }
+
     // 把寵物拖到這件家具上時，家具周圍亮起一圈光，表示放手就會用它。
     func setHighlighted(_ on: Bool) {
         art.shadowColor = NSColor(calibratedRed: 1, green: 0.85, blue: 0.35, alpha: 1).cgColor
@@ -347,11 +305,6 @@ final class SceneryWindow: NSWindow {
     // 疊在圖片上面、會動的部分（床頭櫃的指針、燈泡）。座標跟圖片一樣（點），會跟著拖拉回饋一起動。
     func addOverlay(_ layer: CALayer) {
         art.addSublayer(layer)
-    }
-
-    // 以視窗中心為基準翻面 / 旋轉圖片。
-    func setArtTransform(_ transform: CGAffineTransform) {
-        art.setAffineTransform(transform)
     }
 
     // MARK: 拖動手勢

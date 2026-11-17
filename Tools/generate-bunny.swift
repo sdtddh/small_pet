@@ -132,6 +132,9 @@ struct Pose {
     var armBackReach: CGFloat = 0   // 近的那隻手（畫面左邊）多伸長多少：打電腦時要伸過身體前面碰到鍵盤
     var armFrontReach: CGFloat = 0  // 遠的那隻手多伸長多少
     var carrot = false              // 前手拿著胡蘿蔔，尖端朝嘴巴（吃東西用）
+    var wateringCan = false         // 前手提著澆水壺（幫南瓜鐘澆水用）
+    var pour: CGFloat = 0           // 澆水壺往前傾的角度（弧度，負值壺嘴朝下）
+    var drip = 0                    // 水滴落下的進度（第幾格）
     var attacking = false           // 在地下城打 boss：衣櫃「作戰武器」那格的東西拿出來揮
     var slash: CGFloat = 0          // 揮砍的刀光：0 沒有，越大越亮
     var slashFrom: CGFloat = 0      // 刀光從哪個手臂角度劃到現在的角度
@@ -332,6 +335,8 @@ func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
     if parts.contains(.top) {
         // 胡蘿蔔在臉前面、手的後面，看起來像握在手裡
         if p.carrot { withState(ctx, upper(p)) { drawCarrot(ctx, at: hand(shoulderFront, p.armFront, reach: p.armFrontReach)) } }
+        // 澆水壺也在手的後面，手剛好握在提把上
+        if p.wateringCan { withState(ctx, upper(p)) { drawWateringCan(ctx, p) } }
 
         // 舉高的手要畫在頭前面，不然會被大頭擋住。近的手（shoulderBack）後畫，兩隻手交疊時（打電腦）蓋在遠的手上面
         withState(ctx, upper(p)) {
@@ -400,6 +405,50 @@ func drawBodyBack(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
 }
 
 // 胡蘿蔔：粗的一端在手上，尖端往左上指向嘴巴，葉子從手的另一側露出來。
+// 澆水壺：提把握在手上，壺身吊在手下面，壺嘴朝臉的方向；p.pour 讓整個壺往前傾，壺嘴流出一串水滴落到地上。
+func drawWateringCan(_ ctx: CGContext, _ p: Pose) {
+    let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
+    let blue = hex(0x7CC0E6), blueDark = hex(0x4A93C2), water = hex(0xA9DDF7)
+    withState(ctx, { c in
+        c.translateBy(x: h.x, y: h.y)
+        c.rotate(by: p.pour)
+    }) {
+        // 壺嘴（從壺身右下往右上斜伸出去）和前端的蓮蓬頭
+        shape(ctx, polygon([CGPoint(x: 6, y: -15.5), CGPoint(x: 6, y: -11), CGPoint(x: 18.5, y: -4.5), CGPoint(x: 19.5, y: -7)]),
+              blue, lineWidth: 1.4)
+        withState(ctx, { c in
+            c.translateBy(x: 19.6, y: -5.6)
+            c.rotate(by: 0.5)
+        }) { shape(ctx, ellipse(0, 0, 3.4, 5.6), blueDark, lineWidth: 1.2) }
+        // 壺身和一條裝飾帶
+        shape(ctx, rounded(-7, -20, 15, 14, 3.5), blue, lineWidth: 1.6)
+        line(ctx, segment(CGPoint(x: -6.2, y: -15), CGPoint(x: 7.2, y: -15)), blueDark, width: 1.1)
+        shape(ctx, ellipse(-3.2, -10, 2.6, 3.6), hex(0xFFFFFF, 0.5), stroke: false)
+        // 提把：從壺身上緣兩端彎上來，經過手的位置
+        let handle = CGMutablePath()
+        handle.move(to: CGPoint(x: -4.5, y: -6.5))
+        handle.addCurve(to: CGPoint(x: 4.5, y: -6.5), control1: CGPoint(x: -5, y: 3), control2: CGPoint(x: 5, y: 3))
+        line(ctx, handle, outline, width: 3.4)
+        line(ctx, handle, blue, width: 1.6)
+    }
+    // 水滴：從蓮蓬頭往下掉到地上（y = 4），每格往下移一點，看起來一直在流
+    guard p.pour < -0.2 else { return }
+    let tip = CGPoint(x: 21, y: -4.5).applying(CGAffineTransform(rotationAngle: p.pour))
+    let top = CGPoint(x: h.x + tip.x, y: h.y + tip.y - 2)
+    let ground: CGFloat = 5
+    for k in 0..<4 {
+        let f = (CGFloat(k) + CGFloat(p.drip) / 4).truncatingRemainder(dividingBy: 4) / 4
+        let y = top.y - f * (top.y - ground)
+        let x = top.x + CGFloat(k % 2 == 0 ? -1.2 : 1.2) + f * 1.5
+        shape(ctx, ellipse(x, y, 2.4, 3.4), water, lineWidth: 0.9)
+    }
+    // 落地濺起的小水花
+    let splash = CGFloat(p.drip % 2) * 0.8
+    for dx in [-3.5 - splash, 3.5 + splash] as [CGFloat] {
+        line(ctx, segment(CGPoint(x: top.x + 1 + dx * 0.4, y: ground + 0.5), CGPoint(x: top.x + 1 + dx, y: ground + 2.5)), blueDark, width: 1)
+    }
+}
+
 func drawCarrot(_ ctx: CGContext, at h: CGPoint) {
     let len: CGFloat = 19, rise: CGFloat = 5, half: CGFloat = 5   // 長度、往上的高度、粗端半寬
     let tip = CGPoint(x: h.x - len, y: h.y + rise)
@@ -1187,16 +1236,16 @@ let outfits: [Outfit] = [
 
     // 樹枝：一開始就有（戰力 +0）。作戰武器不能空著，沒拿東西時 App 會讓她拿樹枝。
     Outfit(id: "branch", name: "樹枝", slot: "hand") { ctx, p in
-        guard !p.carrot else { return }
+        guard !p.carrot, !p.wateringCan else { return }
         withState(ctx, upper(p)) { drawBranch(ctx, p) }
     },
     // 劍（城堡掉落）：平常順著手臂斜拿著，打 boss 時跟著手揮。
     Outfit(id: "sword", name: "劍", slot: "hand") { ctx, p in
-        guard !p.carrot else { return }
+        guard !p.carrot, !p.wateringCan else { return }
         withState(ctx, upper(p)) { drawSword(ctx, p) }
     },
     Outfit(id: "balloon", name: "氣球", slot: "hand") { ctx, p in
-        guard !p.carrot else { return }
+        guard !p.carrot, !p.wateringCan else { return }
         withState(ctx, upper(p)) {
             let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
             // 氣球一直飄在頭的右上方，線從手拉上去
@@ -1213,7 +1262,7 @@ let outfits: [Outfit] = [
         }
     },
     Outfit(id: "lollipop", name: "棒棒糖", slot: "hand") { ctx, p in
-        guard !p.carrot else { return }
+        guard !p.carrot, !p.wateringCan else { return }
         withState(ctx, upper(p)) {
             let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
             // 平常直直拿著；打 boss 時糖果朝外、順著手臂揮
@@ -1240,7 +1289,7 @@ let outfits: [Outfit] = [
 
     // 哥德雨傘：收起來拿在手上（順著手臂方向），打 boss 時拿來當劍揮。
     Outfit(id: "umbrella", name: "哥德雨傘", slot: "hand") { ctx, p in
-        guard !p.carrot else { return }
+        guard !p.carrot, !p.wateringCan else { return }
         withState(ctx, upper(p)) {
             let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach)
             let a = p.armFront + 0.6                             // 順著手臂再往前斜一點，傘尖才不會插進腳裡
@@ -2073,7 +2122,7 @@ let actions: [ActionSpec] = [
     ActionSpec(name: "eat", frames: 4, fps: 5, loop: true),
     ActionSpec(name: "typing", frames: 4, fps: 6, loop: true),
     ActionSpec(name: "bed", frames: 2, fps: 1.2, loop: true),
-    ActionSpec(name: "fly", frames: 2, fps: 4, loop: true),
+    ActionSpec(name: "water", frames: 4, fps: 6, loop: true),
     // 在地下城拿作戰武器砍 boss：一刀 6 格，第 3 格砍中（程式在這格讓 boss 閃一下）
     ActionSpec(name: "attack", frames: 6, fps: 9, loop: true),
 ]
@@ -2215,15 +2264,19 @@ func pose(_ action: String, _ i: Int, _ n: Int) -> Pose {
             let d = CGPoint(x: target.x - foot.x, y: target.y - foot.y)
             if isFront { p.frontFoot = d } else { p.backFoot = d }
         }
-    case "fly":
-        // 坐在飛機駕駛座：腰以下被機身擋住（腳縮起來，別從機腹露出來），雙手握操縱桿，耳朵被風吹到後面
-        p.frontFoot = CGPoint(x: 10, y: 8)
-        p.backFoot = CGPoint(x: 7, y: 9)
-        p.armFront = 1.15
-        p.armBack = 1.0
-        p.ears = i == 0 ? 0.55 : 0.68
-        p.eyes = i == 0 ? .open : .happy
-        p.mouthOpen = i == 1
+    case "water":
+        // 站在南瓜鐘旁邊提著澆水壺澆水：壺往前傾、水一直流，頭低低看著南瓜，偶爾笑一下
+        p.wateringCan = true
+        p.drip = i
+        p.armFront = 1.36 + 0.04 * sin(t)
+        p.pour = -0.55 - 0.06 * sin(t)
+        p.armBack = 0.3
+        p.lean = 0.05
+        p.headTilt = 0.1
+        p.bodyY = 0.4 * sin(t)
+        p.frontFoot = CGPoint(x: 2, y: 0)
+        p.ears = 0.06 * sin(t)
+        if i % 2 == 1 { p.eyes = .happy }
     case "attack":
         // 0 準備、1 舉劍、2 揮下、3 砍中、4 收勢、5 站穩
         p.attacking = true
@@ -2550,112 +2603,6 @@ func drawBed(_ ctx: CGContext, _ part: BedPart) {
         fold.addCurve(to: CGPoint(x: 66, y: 32), control1: CGPoint(x: 61, y: 44), control2: CGPoint(x: 66, y: 38))
         line(ctx, fold, quiltDark, width: 1.4)
     }
-}
-
-// MARK: - 飛機（獨立道具圖）
-
-// 螺旋槳雙翼小飛機，機頭朝右。座標一樣跟寵物畫布對齊（offsetX 8），但上下各多留 planeMargin，
-// 飛行時圖會小角度傾斜才不會被切掉；程式要把視窗往下放 planeMargin，地面才對得上。
-// 分三張：
-//   plane.png         停著的樣子（整台，螺旋槳靜止）
-//   plane_back.png    她坐進去後，墊在她後面的部分（尾翼、上翼、椅背、機身）
-//   plane_front_N.png 擋在她前面的部分（機身、擋風玻璃、下翼、輪子、轉動的螺旋槳）
-// 駕駛座：她的屁股在設計座標 (50, 17)，跟坐凳子一樣。Scenery.swift 的 planeSeat 要跟著改。
-let planeWidth: CGFloat = 180
-let planeMargin: CGFloat = 16
-let planeHeight: CGFloat = planeMargin * 2 + 60
-let planeRed = hex(0xE8615A)
-let planeYellow = hex(0xF7C66B)
-let planeDark = hex(0x3A3D46)
-
-enum PlanePart { case parked, back, front(Int) }
-
-func drawPlane(_ ctx: CGContext, _ part: PlanePart) {
-    ctx.translateBy(x: 0, y: planeMargin)
-    var showBack = true, showFront = true
-    var propFrame: Int? = nil   // nil：靜止的槳
-    switch part {
-    case .parked: break
-    case .back: showFront = false
-    case .front(let k): showBack = false; propFrame = k
-    }
-
-    if showBack {
-        // 垂直尾翼
-        shape(ctx, polygon([CGPoint(x: 1, y: 31), CGPoint(x: 4, y: 52), CGPoint(x: 14, y: 52), CGPoint(x: 26, y: 32)]), planeRed)
-        line(ctx, segment(CGPoint(x: 6, y: 48), CGPoint(x: 13, y: 48)), white, width: 2)
-        // 上翼和支柱（在她前方，不會擋到臉）
-        line(ctx, segment(CGPoint(x: 92, y: 31), CGPoint(x: 96, y: 52)), planeDark, width: 2)
-        line(ctx, segment(CGPoint(x: 104, y: 31), CGPoint(x: 106, y: 52)), planeDark, width: 2)
-        shape(ctx, rounded(84, 51, 56, 6, 3), planeYellow)
-        // 椅背
-        shape(ctx, rounded(25, 26, 11, 16, 4), hex(0x8B5E3C))
-    }
-
-    // 機身：尾巴細、機頭圓。停著和前層都要畫（前層擋住她的下半身），後層也畫，飛起來時從縫隙看不到底
-    let body = CGMutablePath()
-    body.move(to: CGPoint(x: 0, y: 32))
-    body.addLine(to: CGPoint(x: 140, y: 33))
-    body.addQuadCurve(to: CGPoint(x: 160, y: 22), control: CGPoint(x: 160, y: 33))
-    body.addQuadCurve(to: CGPoint(x: 140, y: 11), control: CGPoint(x: 160, y: 11))
-    body.addLine(to: CGPoint(x: 46, y: 11))
-    body.addQuadCurve(to: CGPoint(x: 0, y: 25), control: CGPoint(x: 12, y: 13))
-    body.closeSubpath()
-
-    if showFront {
-        // 尾輪
-        line(ctx, segment(CGPoint(x: 14, y: 16), CGPoint(x: 13, y: 8)), planeDark, width: 2)
-        shape(ctx, ellipse(13, 7, 6, 6), planeDark, lineWidth: 1.4)
-        // 主輪
-        line(ctx, segment(CGPoint(x: 104, y: 14), CGPoint(x: 110, y: 10)), planeDark, width: 2.4)
-        line(ctx, segment(CGPoint(x: 120, y: 14), CGPoint(x: 112, y: 10)), planeDark, width: 2.4)
-        shape(ctx, ellipse(111, 10, 12, 12), planeDark)
-        shape(ctx, ellipse(111, 10, 4.5, 4.5), hex(0x9AA0AA), lineWidth: 1.2)
-    }
-
-    if showFront || showBack {
-        shape(ctx, body, planeRed)
-        ctx.saveGState()
-        ctx.addPath(body)
-        ctx.clip()
-        line(ctx, segment(CGPoint(x: 0, y: 21), CGPoint(x: 160, y: 21)), hex(0xFFF3E0), width: 3)
-        shape(ctx, rounded(138, 0, 30, 40, 0), hex(0xC9CED6), stroke: false)   // 引擎罩
-        ctx.restoreGState()
-        ctx.addPath(body)
-        ctx.setStrokeColor(outline)
-        ctx.setLineWidth(2.2)
-        ctx.strokePath()
-        line(ctx, segment(CGPoint(x: 138, y: 13), CGPoint(x: 138, y: 32)), outline, width: 1.6)
-    }
-
-    if showFront {
-        // 機身上的愛心
-        let heart = CGMutablePath()
-        heart.move(to: CGPoint(x: 120, y: 18))
-        heart.addCurve(to: CGPoint(x: 120, y: 27), control1: CGPoint(x: 112, y: 22), control2: CGPoint(x: 115, y: 30))
-        heart.addCurve(to: CGPoint(x: 120, y: 18), control1: CGPoint(x: 125, y: 30), control2: CGPoint(x: 128, y: 22))
-        shape(ctx, heart, hex(0xF7A1A8), lineWidth: 1.4)
-        // 駕駛艙邊緣和擋風玻璃
-        shape(ctx, rounded(32, 30, 44, 4, 2), planeDark, lineWidth: 1.6)
-        shape(ctx, polygon([CGPoint(x: 76, y: 33), CGPoint(x: 80, y: 46), CGPoint(x: 86, y: 46), CGPoint(x: 88, y: 33)]),
-              hex(0xBFEAF7, 0.75), lineWidth: 1.6)
-        // 水平尾翼、下翼
-        shape(ctx, ellipse(13, 28, 28, 6), planeYellow, lineWidth: 1.8)
-        shape(ctx, rounded(86, 13, 50, 6, 3), planeYellow)
-        // 翼間支柱（前面那一對）
-        line(ctx, segment(CGPoint(x: 92, y: 19), CGPoint(x: 92, y: 31)), planeDark, width: 2)
-        line(ctx, segment(CGPoint(x: 130, y: 19), CGPoint(x: 133, y: 52)), planeDark, width: 2)
-    }
-
-    // 螺旋槳
-    if case .back = part { return }
-    if let k = propFrame {
-        shape(ctx, ellipse(163, 22, 6, 38), hex(0xDDE3EA, 0.45), stroke: false)
-        shape(ctx, ellipse(163, 22, 3.5, k == 0 ? 34 : 12), hex(0x8B5E3C, 0.75), lineWidth: 1.2)
-    } else {
-        shape(ctx, ellipse(163, 22, 4, 34), hex(0x8B5E3C), lineWidth: 1.6)
-    }
-    shape(ctx, ellipse(162, 22, 7, 9), planeDark, lineWidth: 1.6)
 }
 
 // MARK: - 劍與刀光（地下城打 boss）
@@ -3198,7 +3145,7 @@ func anchorTransform(_ anchor: String, _ p: Pose) -> CGAffineTransform? {
     case "head": return headTransform(p)
     case "upper": return upperTransform(p)
     case "hand":
-        if p.carrot { return nil }
+        if p.carrot || p.wateringCan { return nil }
         let h = hand(shoulderFront, p.armFront, reach: p.armFrontReach), h0 = hand(shoulderFront, restPose.armFront)
         return CGAffineTransform(translationX: h.x - h0.x, y: h.y - h0.y).concatenating(upperTransform(p))
     default: return nil
@@ -3326,12 +3273,26 @@ func drawMonitor(_ ctx: CGContext) {
 
 // MARK: - 時鐘（番茄鐘）
 //
-// clock.png：從土裡長出來的番茄掛鐘。一小堆土，冒出一根番茄莖（兩片葉子），莖頂端結了一顆番茄，番茄上是錶面。
+// 時鐘有兩種外觀，使用者在選單「時鐘外觀」挑（App 依選擇載入其中一張）：
+//   clock_tomato.png：從土裡長出來的番茄。一小堆土，冒出一根番茄莖（兩片葉子），莖頂端結了一顆番茄，番茄上是錶面。
+//   clock_pumpkin.png：擺在一小片淺淺草地上的南瓜。蒂頭長出一條藤，沿著南瓜右邊垂到地上再往右爬一小段，帶兩片葉子和一根捲鬚。
 // 時針、分針、秒針和番茄鐘剩下的時間（錶面上的扇形）會動，由程式（ClockFace.swift）畫在圖上面，
-// 所以這張圖只畫不會動的部分；錶面中心、半徑要跟 ClockFace 的常數一致。
-let clockWidth: CGFloat = 64, clockHeight: CGFloat = 96
+// 所以這些圖只畫不會動的部分；錶面中心要跟 ClockFace 的 ClockLook.faceCenter 一致，半徑都一樣。
+let tomatoClockWidth: CGFloat = 64, tomatoClockHeight: CGFloat = 96
+let pumpkinClockWidth: CGFloat = 100, pumpkinClockHeight: CGFloat = 64
+let clockGrassLeft: CGFloat = 14   // 草地往南瓜左邊多鋪的寬度：她站在左邊澆水時，水會落在這片草上
 
-func drawClock(_ ctx: CGContext) {
+// 錶面的刻度：12 / 3 / 6 / 9 長一點
+func drawClockTicks(_ ctx: CGContext, _ c: CGPoint) {
+    for i in 0..<12 {
+        let a = CGFloat.pi / 2 - CGFloat(i) * .pi / 6
+        let inner: CGFloat = i % 3 == 0 ? 12.5 : 14.2
+        line(ctx, segment(CGPoint(x: c.x + cos(a) * inner, y: c.y + sin(a) * inner),
+                          CGPoint(x: c.x + cos(a) * 16, y: c.y + sin(a) * 16)), outline, width: i % 3 == 0 ? 1.3 : 0.9)
+    }
+}
+
+func drawTomatoClock(_ ctx: CGContext) {
     let red = hex(0xE8604C), redDark = hex(0xC9483A), leaf = hex(0x6CC46A), leafDark = hex(0x4E9E4F)
     let soil = hex(0x8A5A3B), soilDark = hex(0x6B4329)
     // 一片葉子：以 (x, y) 為葉柄，往 angle 方向長出去
@@ -3385,17 +3346,96 @@ func drawClock(_ ctx: CGContext) {
     shape(ctx, rounded(30, 87, 4, 6, 1.5), leafDark, lineWidth: 1.3)
     // 錶面
     shape(ctx, ellipse(c.x, c.y, 36, 36), hex(0xFFF8E8), lineWidth: 1.6)
-    // 刻度：12 / 3 / 6 / 9 長一點
-    for i in 0..<12 {
-        let a = CGFloat.pi / 2 - CGFloat(i) * .pi / 6
-        let inner: CGFloat = i % 3 == 0 ? 12.5 : 14.2
-        line(ctx, segment(CGPoint(x: c.x + cos(a) * inner, y: c.y + sin(a) * inner),
-                          CGPoint(x: c.x + cos(a) * 16, y: c.y + sin(a) * 16)), outline, width: i % 3 == 0 ? 1.3 : 0.9)
+    drawClockTicks(ctx, c)
+}
+
+func drawPumpkinClock(_ ctx: CGContext) {
+    drawClockGrass(ctx, front: false)
+    withState(ctx, { $0.translateBy(x: clockGrassLeft, y: 0) }) { drawPumpkin(ctx) }
+    drawClockGrass(ctx, front: true)
+}
+
+// 淺淺的草地：後層是一片低低的草皮和幾叢草（在南瓜後面），前層是幾叢擋在南瓜下緣前面的草，看起來像坐在草裡。
+func drawClockGrass(_ ctx: CGContext, front: Bool) {
+    let grass = hex(0xA9DC8A), grassDark = hex(0x6FB45A)
+    func tuft(_ x: CGFloat, _ y: CGFloat, _ h: CGFloat) {
+        for (dx, tip) in [(-2.2, -3.2), (0, 0.4), (2.2, 3.4)] as [(CGFloat, CGFloat)] {
+            let blade = CGMutablePath()
+            blade.move(to: CGPoint(x: x + dx, y: y))
+            blade.addQuadCurve(to: CGPoint(x: x + dx + tip, y: y + h * (dx == 0 ? 1 : 0.75)), control: CGPoint(x: x + dx, y: y + h * 0.6))
+            line(ctx, blade, grassDark, width: 1.2)
+        }
     }
+    if front {
+        for (x, h) in [(22, 5), (40, 4), (58, 5), (74, 4)] as [(CGFloat, CGFloat)] { tuft(x, 0.5, h) }
+        return
+    }
+    let w = pumpkinClockWidth
+    let patch = CGMutablePath()
+    patch.move(to: CGPoint(x: 0, y: 0))
+    patch.addCurve(to: CGPoint(x: 10, y: 4.5), control1: CGPoint(x: 1, y: 2.5), control2: CGPoint(x: 4, y: 4.5))
+    patch.addLine(to: CGPoint(x: w - 10, y: 4.5))
+    patch.addCurve(to: CGPoint(x: w, y: 0), control1: CGPoint(x: w - 4, y: 4.5), control2: CGPoint(x: w - 1, y: 2.5))
+    patch.closeSubpath()
+    shape(ctx, patch, grass, stroke: false)
+    let edge = CGMutablePath()
+    edge.move(to: CGPoint(x: 0.6, y: 0))
+    edge.addCurve(to: CGPoint(x: 10, y: 4.5), control1: CGPoint(x: 1.5, y: 2.5), control2: CGPoint(x: 4, y: 4.5))
+    edge.addLine(to: CGPoint(x: w - 10, y: 4.5))
+    edge.addCurve(to: CGPoint(x: w - 0.6, y: 0), control1: CGPoint(x: w - 4, y: 4.5), control2: CGPoint(x: w - 1.5, y: 2.5))
+    line(ctx, edge, grassDark, width: 1.2)
+    for (x, h) in [(6, 6), (14, 4.5), (86, 5), (94, 6.5)] as [(CGFloat, CGFloat)] { tuft(x, 3.5, h) }
+}
+
+func drawPumpkin(_ ctx: CGContext) {
+    let orange = hex(0xF59A3A), orangeDark = hex(0xD9772A), stem = hex(0x8A6538)
+    let leaf = hex(0x6CC46A), leafDark = hex(0x4E9E4F)
+    // 藤：從蒂頭往右彎、沿著南瓜右邊垂到地上，再往右爬一小段；先畫，貼著南瓜的部分會被南瓜蓋住。
+    // 先描一條深色的粗線當邊框，再疊一條綠色的細線。
+    let vine = CGMutablePath()
+    vine.move(to: CGPoint(x: 33, y: 50))
+    vine.addCurve(to: CGPoint(x: 62, y: 44), control1: CGPoint(x: 42, y: 58), control2: CGPoint(x: 56, y: 54))
+    vine.addCurve(to: CGPoint(x: 68, y: 6), control1: CGPoint(x: 70, y: 32), control2: CGPoint(x: 71, y: 16))
+    vine.addCurve(to: CGPoint(x: 84, y: 2.2), control1: CGPoint(x: 66, y: 1), control2: CGPoint(x: 76, y: 2.2))
+    line(ctx, vine, outline, width: 3.8)
+    line(ctx, vine, leaf, width: 2.0)
+    // 捲捲的鬚
+    let tendril = CGMutablePath()
+    tendril.move(to: CGPoint(x: 69, y: 30))
+    tendril.addCurve(to: CGPoint(x: 78, y: 32), control1: CGPoint(x: 73, y: 36), control2: CGPoint(x: 79, y: 37))
+    tendril.addCurve(to: CGPoint(x: 74, y: 30), control1: CGPoint(x: 78, y: 28), control2: CGPoint(x: 74, y: 27))
+    line(ctx, tendril, leafDark, width: 1.2)
+    // 葉子：一片在藤彎下去的地方，一片在地上
+    func leafAt(_ base: CGPoint, _ tip: CGPoint, bulge: CGFloat) {
+        let mid = CGPoint(x: (base.x + tip.x) / 2, y: (base.y + tip.y) / 2)
+        let n = CGPoint(x: -(tip.y - base.y), y: tip.x - base.x)
+        let len = max(hypot(n.x, n.y), 0.01)
+        let off = CGPoint(x: n.x / len * bulge, y: n.y / len * bulge)
+        let path = CGMutablePath()
+        path.move(to: base)
+        path.addQuadCurve(to: tip, control: CGPoint(x: mid.x + off.x, y: mid.y + off.y))
+        path.addQuadCurve(to: base, control: CGPoint(x: mid.x - off.x, y: mid.y - off.y))
+        shape(ctx, path, leaf, lineWidth: 1.3)
+        line(ctx, segment(base, CGPoint(x: base.x + (tip.x - base.x) * 0.8, y: base.y + (tip.y - base.y) * 0.8)), leafDark, width: 0.8)
+    }
+    leafAt(CGPoint(x: 52, y: 53), CGPoint(x: 62, y: 61), bulge: 5)
+    leafAt(CGPoint(x: 76, y: 3), CGPoint(x: 82, y: 13), bulge: 4.5)
+    // 蒂頭（下半截會被南瓜蓋住）
+    shape(ctx, rounded(29, 42, 6, 11, 2), stem, lineWidth: 1.4)
+    // 南瓜本體：兩側的瓣在後面，中間一瓣在前面，瓣跟瓣之間的線就是南瓜的溝
+    for cx in [15, 49] as [CGFloat] { shape(ctx, ellipse(cx, 24, 28, 38), orangeDark, lineWidth: 1.8) }
+    for cx in [22, 42] as [CGFloat] { shape(ctx, ellipse(cx, 24.5, 30, 43), orange, lineWidth: 1.8) }
+    shape(ctx, ellipse(32, 25, 30, 46), orange, lineWidth: 1.9)
+    // 亮面
+    shape(ctx, ellipse(10, 31, 4, 9), hex(0xFFFFFF, 0.45), stroke: false)
+    // 錶面
+    shape(ctx, ellipse(32, 24, 36, 36), hex(0xFFF8E8), lineWidth: 1.6)
+    drawClockTicks(ctx, CGPoint(x: 32, y: 24))
 }
 
 if previewFrames == nil {
-try write(renderPNG(width: clockWidth, height: clockHeight, offset: 0) { drawClock($0) }, "props/clock.png")
+try write(renderPNG(width: tomatoClockWidth, height: tomatoClockHeight, offset: 0) { drawTomatoClock($0) }, "props/clock_tomato.png")
+try write(renderPNG(width: pumpkinClockWidth, height: pumpkinClockHeight, offset: 0) { drawPumpkinClock($0) }, "props/clock_pumpkin.png")
 try write(renderPNG(height: canopyHeight, offset: 0) { drawCanopy($0) }, "props/parachute.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: false) }, "props/dining.png")
 try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: true) }, "props/dining_meal.png")
@@ -3404,11 +3444,8 @@ try write(renderPNG(width: computerWidth, height: computerHeight) { drawComputer
 for (part, name) in [(BedPart.empty, "bed"), (.back, "bed_back"), (.front, "bed_front")] {
     try write(renderPNG(width: bedWidth, height: bedHeight) { drawBed($0, part) }, "props/\(name).png")
 }
-for (part, name) in [(PlanePart.parked, "plane"), (.back, "plane_back"), (.front(0), "plane_front_0"), (.front(1), "plane_front_1")] {
-    try write(renderPNG(width: planeWidth, height: planeHeight) { drawPlane($0, part) }, "props/\(name).png")
-}
 try write(renderPNG(width: monitorWidth, height: monitorHeight, offset: 0) { drawMonitor($0) }, "props/monitor.png")
-count += 15
+count += 12
 }
 
 // 外觀圖層：每種髮型畫 hairBehind / head，每套服裝畫 base / top，各自獨立，App 再疊起來。

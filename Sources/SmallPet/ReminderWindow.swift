@@ -187,7 +187,7 @@ final class RemindersWindowController {
 // 設定視窗現在在哪一頁（從時鐘打開時直接跳到番茄鐘）。
 @MainActor
 final class RemindersNav: ObservableObject {
-    enum Tab: Hashable { case pomodoro, countdown, water, alarm }
+    enum Tab: Hashable { case pomodoro, countdown, water, alarm, look }
     @Published var tab = Tab.pomodoro
 }
 
@@ -199,6 +199,7 @@ struct RemindersView: View {
     @State private var alarmTime = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
     @State private var alarmLabel = ""
     @State private var alarmDaily = false
+    @AppStorage(ClockLook.key) private var clockLook = ClockLook.current
 
     var body: some View {
         VStack(spacing: 8) {
@@ -207,11 +208,46 @@ struct RemindersView: View {
                 countdownTab.tabItem { Text("倒數") }.tag(RemindersNav.Tab.countdown)
                 waterTab.tabItem { Text("喝水") }.tag(RemindersNav.Tab.water)
                 alarmTab.tabItem { Text("鬧鐘・行事曆") }.tag(RemindersNav.Tab.alarm)
+                lookTab.tabItem { Text("外觀") }.tag(RemindersNav.Tab.look)
             }
             Toggle("提醒時輕輕響一聲", isOn: $center.soundOn).font(.callout)
         }
         .padding()
         .frame(width: 380, height: 470)
+    }
+
+    // MARK: 外觀
+
+    // 時鐘長成哪種植物：點圖就換，桌面上的時鐘馬上跟著變。
+    private var lookTab: some View {
+        VStack(spacing: 16) {
+            Text("時鐘的外觀").font(.headline).foregroundStyle(.secondary)
+            HStack(spacing: 18) {
+                ForEach(ClockLook.allCases) { look in
+                    Button {
+                        clockLook = look
+                        NotificationCenter.default.post(name: ClockLook.didChange, object: nil)
+                    } label: {
+                        VStack(spacing: 8) {
+                            ClockLookPreview(look: look)
+                                .frame(width: 110, height: 110)
+                            Text(look.title).font(.callout.weight(clockLook == look ? .semibold : .regular))
+                        }
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 10)
+                            .fill(clockLook == look ? Color.accentColor.opacity(0.15) : Color.clear))
+                        .overlay(RoundedRectangle(cornerRadius: 10)
+                            .stroke(clockLook == look ? Color.accentColor : Color.secondary.opacity(0.3),
+                                    lineWidth: clockLook == look ? 2 : 1))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text("她澆水時會走到植物旁邊，水落在土或草地上。").font(.caption).foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.top, 16)
     }
 
     // MARK: 番茄鐘
@@ -397,6 +433,19 @@ struct RemindersView: View {
             }
             .padding(.top, 8)
             .padding(.horizontal, 4)
+        }
+    }
+}
+
+// 外觀分頁裡的小圖：直接用 App 裡那張時鐘圖。
+private struct ClockLookPreview: View {
+    let look: ClockLook
+
+    var body: some View {
+        if let image = SpriteLibrary.propImage(look.propName) {
+            Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
+        } else {
+            Text(look.title)
         }
     }
 }

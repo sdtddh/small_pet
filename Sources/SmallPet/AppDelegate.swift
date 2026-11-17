@@ -71,6 +71,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return self.scenery.monitor.window.isVisible || self.systemInfo.isVisible
         }
         systemMonitor.onSample = { [weak self] in self?.scenery.gauge.update($0) }
+        // 在時鐘視窗的「外觀」分頁換了番茄 / 南瓜
+        NotificationCenter.default.addObserver(forName: ClockLook.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.scenery.setClockLook(.current)
+                if self.scenery.clock.window.isVisible { self.updateClockFace() }
+            }
+        }
         HotKey.register { [weak self] in self?.toggleEverything() }
         pet.onOuting = { [weak self] in self?.goOut() ?? false }
         pet.onDragHover = { [weak self] frame in self?.highlightProp(under: frame) }
@@ -398,10 +406,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do { try task.run() } catch { NSLog("關閉螢幕失敗：\(error)") }
     }
 
-    // 她正在用的電腦桌、床或飛機被隱藏了（開飛機時會直接掉下來，夠高就開傘）：不用了，家具才會馬上收起來。
+    // 她正在用的電腦桌或床被隱藏了：不用了，家具才會馬上收起來。
     // 餐桌不算：吃飯時餐桌本來就會暫時出現，吃完才收。
     private func leaveHiddenProps() {
-        if [scenery.computer, scenery.bed, scenery.plane].contains(where: { $0.inUse && !scenery.isShown($0) }) {
+        if [scenery.computer, scenery.bed].contains(where: { $0.inUse && !scenery.isShown($0) }) {
             pet.stopBusy()
         }
     }
@@ -442,23 +450,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func checkProps() {
         if !pet.isBusy { scenery.releaseAll(below: pet.window) }
         scenery.updateBed(sleeper: pet.action == .bed ? pet.window : nil)
-        scenery.updatePlane(rider: pet.action == .fly ? pet.window : nil,
-                            facingLeft: pet.facingLeft, pitch: pet.flightPitch, time: CACurrentMediaTime())
     }
 
     // MARK: - 自己找事做
 
-    // 自動模式換動作時偶爾呼叫：去角落坐好一陣子；電腦桌、床、飛機有擺出來的話，也可能過去。
+    // 自動模式換動作時偶爾呼叫：去角落坐好一陣子；電腦桌、床有擺出來的話，也可能過去。
     // 回傳 true 代表已經出發了。
     private func goOut() -> Bool {
         var choices = ["corner", "corner"]
         if scenery.isShown(scenery.computer) { choices.append("computer") }
         if scenery.isShown(scenery.bed) { choices.append("bed") }
-        if scenery.isShown(scenery.plane) { choices.append("plane") }
+        if scenery.isShown(scenery.clock) { choices.append("clock") }
         switch choices.randomElement() {
         case "computer": visit(scenery.computer, doing: .typing)
         case "bed": visit(scenery.bed, doing: .bed)
-        case "plane": visit(scenery.plane, doing: .fly)
+        case "clock": waterPlant()
         default: restInCorner()
         }
         return true
@@ -489,7 +495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func prop(under frame: NSRect) -> Prop? {
         let point = NSPoint(x: frame.midX, y: frame.minY + 20)
         return scenery.all.first { prop in
-            prop !== scenery.monitor && prop !== scenery.clock && scenery.isShown(prop) && !prop.inUse && prop.window.isVisible
+            prop !== scenery.monitor && scenery.isShown(prop) && !prop.inUse && prop.window.isVisible
                 && prop.window.frame.insetBy(dx: -6, dy: -24).contains(point)
         }
     }
@@ -502,7 +508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         highlightedProp = target
     }
 
-    // 放手時：在家具上的話，回傳落地後要做的事（吃飯、打電腦、上床睡覺、開飛機）。
+    // 放手時：在家具上的話，回傳落地後要做的事（吃飯、打電腦、上床睡覺、幫植物澆水）。
     private func dropAction(at frame: NSRect) -> (() -> Void)? {
         guard !pet.concealed, !scenery.mealInProgress, let prop = prop(under: frame) else { return nil }
         return { [weak self] in
@@ -513,8 +519,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.visit(prop, doing: .typing)
             } else if prop === self.scenery.bed {
                 self.visit(prop, doing: .bed)
-            } else if prop === self.scenery.plane {
-                self.visit(prop, doing: .fly)
+            } else if prop === self.scenery.clock {
+                self.waterPlant()
             }
         }
     }
@@ -527,6 +533,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             self.pet.speech.say(action.rawValue, chance: 0.6, force: false)
             self.pet.interlude(action)
+        }
+    }
+
+    // 走到時鐘（番茄或南瓜）旁邊澆水。澆水壺的蓮蓬頭在她視窗左邊算起 98 點的地方（面向右時）。
+    // 站在植物左邊、面向右澆；左邊沒位置的話站到右邊、面向左澆。水落在哪裡看外觀（ClockLook.waterSpots）。
+    private func waterPlant() {
+        guard let visible = NSScreen.main?.visibleFrame else { return }
+        let clock = scenery.clock
+        let spots = ClockLook.current.waterSpots
+        let spout: CGFloat = 98
+        let width = pet.window.frame.width
+        var x = clock.x + spots.left - spout
+        var facing: CGFloat = 1
+        if x < visible.minX {
+            x = clock.x + spots.right - (width - spout)
+            facing = -1
+        }
+        scenery.releaseAll(below: pet.window)
+        scenery.use(clock, below: pet.window)
+        pet.walk(to: x, facing: facing) { [weak self] in
+            guard let self else { return }
+            self.pet.speech.say("water", chance: 0.6, force: false)
+            self.pet.interlude(.water)
         }
     }
 
@@ -677,9 +706,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - 動畫迴圈
 
-    // 動畫更新頻率：她在動（走路、跑、被拖、在空中、開飛機）時每秒 60 次，畫面才順；
+    // 動畫更新頻率：她在動（走路、跑、被拖、在空中）時每秒 30 次（跑步圖一秒 16 格，30 次夠順，又比 60 次省一半 CPU）；
     // 站著、坐著、睡覺、打字、跳舞、打 boss 時，圖一秒最多換 10 格左右，每秒 20 次就夠，省下大部分 CPU。
-    private static let movingInterval = 1.0 / 60.0
+    private static let movingInterval = 1.0 / 30.0
     private static let stillInterval = 1.0 / 20.0
     private static let stillDelay = 0.5   // 停下來這麼久才降速，避免走走停停時一直切換
     private var stillSince: Double?
@@ -707,7 +736,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.timer = timer
     }
 
-    // 她靜止一陣子（或藏起來）就降到每秒 20 次；一動起來馬上回到 60 次。
+    // 她靜止一陣子（或藏起來）就降到每秒 20 次；一動起來馬上回到 30 次。
     private func adjustFrameRate(now: Double) {
         let still = pet.concealed || pet.isStill
         if still { stillSince = stillSince ?? now } else { stillSince = nil }

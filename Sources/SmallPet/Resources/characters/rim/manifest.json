@@ -30,11 +30,6 @@
       "frames" : 2,
       "loop" : true
     },
-    "fly" : {
-      "fps" : 4,
-      "frames" : 2,
-      "loop" : true
-    },
     "idle" : {
       "fps" : 3,
       "frames" : 4,
@@ -74,6 +69,11 @@
       "fps" : 10,
       "frames" : 6,
       "loop" : true
+    },
+    "water" : {
+      "fps" : 6,
+      "frames" : 4,
+      "loop" : true
     }
   },
   "backFrames" : {
@@ -95,13 +95,12 @@
     "cell" : 224,
     "columns" : 8,
     "start" : {
-      "attack" : 60,
+      "attack" : 62,
       "bed" : 56,
       "dance" : 28,
       "dragged" : 26,
       "eat" : 48,
       "fall" : 24,
-      "fly" : 58,
       "idle" : 0,
       "jump" : 16,
       "parachute" : 44,
@@ -109,7 +108,8 @@
       "sit" : 20,
       "sleep" : 22,
       "typing" : 52,
-      "walk" : 4
+      "walk" : 4,
+      "water" : 58
     }
   }
 }

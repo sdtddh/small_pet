@@ -300,6 +300,12 @@ final class SpriteLibrary {
         NSImage(contentsOf: shared.appendingPathComponent("props/\(name).png"))
     }
 
+    // 不用載入角色也能讀道具圖（設定視窗的預覽用）。
+    static func propImage(_ name: String) -> NSImage? {
+        Bundle.module.url(forResource: "Resources", withExtension: nil)
+            .flatMap { NSImage(contentsOf: $0.appendingPathComponent("props/\(name).png")) }
+    }
+
     func outfits(in slot: String) -> [Manifest.Outfit] {
         manifest.outfits.filter { $0.slot == slot }
     }
