@@ -18,7 +18,7 @@ enum ClockLook: String, CaseIterable, Identifiable {
     static let didChange = Notification.Name("ClockLookDidChange")
 
     static var current: ClockLook {
-        UserDefaults.standard.string(forKey: key).flatMap(ClockLook.init) ?? .pumpkin
+        UserDefaults.standard.string(forKey: key).flatMap(ClockLook.init) ?? .tomato
     }
 
     var id: Self { self }
