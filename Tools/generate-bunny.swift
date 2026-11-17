@@ -1352,37 +1352,7 @@ let outfits: [Outfit] = [
         }
     },
     Outfit(id: "wings", name: "天使翅膀", slot: "back") { ctx, p in
-        // 跳起來、被抓、往下掉時翅膀張開一點
-        let spread: CGFloat = raised(p.armFront) || raised(p.armBack) ? 0.25 : 0
-        func wing(_ root: CGPoint, _ dir: CGFloat, _ color: CGColor) {
-            withState(ctx, { c in
-                c.translateBy(x: root.x, y: root.y)
-                c.rotate(by: (-0.25 - spread) * dir)   // 翼尖往上翹
-                c.scaleBy(x: dir, y: 1)
-            }) {
-                let w = CGMutablePath()
-                w.move(to: .zero)
-                w.addQuadCurve(to: CGPoint(x: -26, y: 16), control: CGPoint(x: -12, y: 18))
-                w.addQuadCurve(to: CGPoint(x: -22, y: 6), control: CGPoint(x: -28, y: 10))
-                w.addQuadCurve(to: CGPoint(x: -24, y: -2), control: CGPoint(x: -18, y: 2))
-                w.addQuadCurve(to: CGPoint(x: -17, y: -8), control: CGPoint(x: -22, y: -8))
-                w.addQuadCurve(to: CGPoint(x: -4, y: -9), control: CGPoint(x: -10, y: -12))
-                w.closeSubpath()
-                shape(ctx, w, color)
-                for (a, b) in [(CGPoint(x: -6, y: 4), CGPoint(x: -19, y: 9)), (CGPoint(x: -6, y: -2), CGPoint(x: -17, y: 0))] {
-                    line(ctx, segment(a, b), hex(0xD7E3EA), width: 1.4)
-                }
-            }
-        }
-        withState(ctx, upper(p)) {
-            if p.back {
-                wing(CGPoint(x: 44, y: 31), 1, white)
-                wing(CGPoint(x: 58, y: 31), -1, white)
-            } else {
-                wing(CGPoint(x: 39, y: 33), 1, hex(0xEDF3F7))   // 遠的那片，高一點
-                wing(CGPoint(x: 37, y: 29), 1, white)
-            }
-        }
+        drawAngelWings(ctx, p)
         // 正面時 App 把翅膀疊在本體下面（behind），身體自然會蓋住它，不用挖
     },
     Outfit(id: "vip_wings", name: "VIP 星耀之翼", slot: "back") { ctx, p in
@@ -1391,6 +1361,47 @@ let outfits: [Outfit] = [
         if p.back { drawVIPGem(ctx, p) }   // 背對時鑽石鑲在背上
     },
 ]
+
+// 天使翅膀：左右各一片大大的拱形，從肩膀往外攤開。
+//   上緣從肩膀拱起來、在翅膀中段最高，到外側圓圓地垂下來；下緣是一排小波浪（羽毛尖），收回腰側。
+//   每格輕輕拍一下；跳起來、被抓、往下掉時往上舉。
+func drawAngelWings(_ ctx: CGContext, _ p: Pose) {
+    let phase = 2 * .pi * CGFloat(p.frame) / CGFloat(max(p.frameCount, 1))
+    let excited = raised(p.armFront) || raised(p.armBack)
+    let lift: CGFloat = excited ? 0.3 + 0.04 * sin(phase) : 0.03 * sin(phase)
+
+    func wing(_ root: CGPoint, _ dir: CGFloat) {
+        withState(ctx, { c in
+            c.translateBy(x: root.x, y: root.y)
+            c.scaleBy(x: dir, y: 1)
+            c.rotate(by: -lift)
+        }) {
+            let w = CGMutablePath()
+            w.move(to: CGPoint(x: 2, y: 2))
+            // 上緣：拱起來再往外圓圓地垂下
+            w.addCurve(to: CGPoint(x: -30, y: 20), control1: CGPoint(x: -6, y: 18), control2: CGPoint(x: -18, y: 23))
+            w.addCurve(to: CGPoint(x: -41, y: -10), control1: CGPoint(x: -42, y: 17), control2: CGPoint(x: -45, y: 0))
+            // 下緣：一排往下尖的小波浪，回到腰側
+            let wave = [CGPoint(x: -41, y: -10), CGPoint(x: -33, y: -6), CGPoint(x: -25, y: -8),
+                        CGPoint(x: -17, y: -5), CGPoint(x: -9, y: -7), CGPoint(x: 0, y: -3)]
+            for (a, b) in zip(wave, wave.dropFirst()) {
+                w.addQuadCurve(to: b, control: CGPoint(x: (a.x + b.x) / 2 + 1, y: min(a.y, b.y) - 4))
+            }
+            w.closeSubpath()
+            shape(ctx, w, white, lineWidth: 2.1)
+            // 裡面淡淡的一道羽毛線，順著上緣
+            let c = CGMutablePath()
+            c.move(to: CGPoint(x: -6, y: 6))
+            c.addQuadCurve(to: CGPoint(x: -34, y: 6), control: CGPoint(x: -20, y: 16))
+            line(ctx, c, hex(0xCBD9E6), width: 1.6)
+        }
+    }
+
+    withState(ctx, upper(p)) {
+        wing(CGPoint(x: 43, y: 31), 1)
+        wing(CGPoint(x: 53, y: 31), -1)
+    }
+}
 
 // MARK: - 外觀：髮型與服裝（純外觀，不加戰鬥力）
 //
