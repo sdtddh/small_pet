@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let reminderCard = ReminderCardController()
     private lazy var remindersWindow = RemindersWindowController(center: reminders)
     private var boss: BossWindow?
+    private var bossHidden = false   // 往下拉藏起來了，她也一起藏（只算這場戰鬥，選單上「戰鬥中」或 ⌥F 叫得回來）
     // 試打 boss：不算冒險次數、不存檔、不給戰利品，打 15 秒看看效果。
     private var trial: (dungeon: Dungeon, startedAt: Date, endsAt: Date)?
     private static let trialSeconds: TimeInterval = 15
@@ -203,7 +204,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if let run = stats.run, let dungeon = Dungeon.find(run.dungeonID) {
             let minutes = max(1, Int(ceil(run.endsAt.timeIntervalSinceNow / 60)))
-            menu.addItem(NSMenuItem(title: "戰鬥中：\(dungeon.name)的\(dungeon.bossName)（約 \(minutes) 分鐘後分出勝負）", action: nil, keyEquivalent: ""))
+            let item = NSMenuItem(title: "戰鬥中：\(dungeon.name)的\(dungeon.bossName)（約 \(minutes) 分鐘後分出勝負）",
+                                  action: bossHidden ? #selector(showBoss) : nil, keyEquivalent: "")
+            if bossHidden {
+                item.title += "——點一下叫出來"
+                item.target = self
+            }
+            menu.addItem(item)
         }
 
         menu.addItem(.separator())
@@ -347,11 +354,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func setEverythingConcealed(_ on: Bool) {
+        if !on, bossHidden { setBossHidden(false) }   // 顯示全部：連打 boss 的她和 boss 一起叫回來
         guard on != pet.concealed else { return }
         pet.setConcealed(on)
         scenery.setConcealed(on, below: pet.window)
         if let boss {
-            if on { boss.orderOut(nil) } else { boss.order(.below, relativeTo: pet.window.windowNumber) }
+            if on { boss.orderOut(nil) } else if !bossHidden { boss.order(.below, relativeTo: pet.window.windowNumber) }
         }
     }
 
@@ -596,11 +604,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if x != pet.x { pet.show(at: NSPoint(x: x, y: visible.minY)) }
         let window = BossWindow(dungeon: dungeon, sprites: sprites, facingLeft: facing > 0)
         window.onClick = { [weak self] in self?.bossClicked() }
+        window.onMoved = { [weak self] x in self?.bossMoved(to: x) }
+        window.onSwipeDown = { [weak self] in self?.setBossHidden(true) }
+        setBossHidden(false)
         window.setFrameOrigin(NSPoint(x: bossX, y: visible.minY))
         if !pet.concealed { window.order(.below, relativeTo: pet.window.windowNumber) }
         boss?.orderOut(nil)
         boss = window
         pet.startBattle(facing: facing)
+    }
+
+    // boss 被拖到新位置：她跑過去，站在原本那一側（放不下就換邊），boss 轉過來面向她。
+    private func bossMoved(to bossX: CGFloat) {
+        guard let visible = NSScreen.main?.visibleFrame, let boss else { return }
+        let petWidth = pet.window.frame.width
+        let reach: CGFloat = 92
+        let leftX = bossX - reach                                        // 站在 boss 左邊、面向右
+        let rightX = bossX + BossWindow.artSize.width + reach - petWidth // 站在 boss 右邊、面向左
+        let fitsLeft = leftX >= visible.minX, fitsRight = rightX + petWidth <= visible.maxX
+        let wasLeft = pet.x + petWidth / 2 < boss.frame.midX
+        let left = wasLeft ? fitsLeft || !fitsRight : !(fitsRight || !fitsLeft)
+        let x = min(max(left ? leftX : rightX, visible.minX), visible.maxX - petWidth)
+        boss.setFacing(left: left)
+        pet.moveBattle(to: x, facing: left ? 1 : -1)
+    }
+
+    // boss 往下拉：boss 和她一起藏起來，戰鬥照常進行；叫回來時一起出現。
+    private func setBossHidden(_ on: Bool) {
+        guard on != bossHidden else { return }
+        bossHidden = on
+        pet.setBattleHidden(on)
+        guard let boss else { return }
+        if on { boss.orderOut(nil) } else if !pet.concealed { boss.order(.below, relativeTo: pet.window.windowNumber) }
+    }
+
+    // 選單上點「戰鬥中」：把藏起來的 boss 和她叫回來。
+    @objc private func showBoss() {
+        setEverythingConcealed(false)
     }
 
     // 試打：跟真的冒險一樣叫出 boss 開打，15 秒後依現在的戰鬥力算一次勝負，但什麼都不記錄。
@@ -654,6 +694,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let trial, pet.travel == .fighting, Date() >= trial.endsAt else { return }
         self.trial = nil
         let won = Double.random(in: 0..<1) < trial.dungeon.successChance(power: stats.power)
+        setBossHidden(false)   // 藏起來時打完了：一起出現，看結果、聽她報告
         let finishing = boss
         boss = nil
         pet.endBattle()
@@ -673,6 +714,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard pet.travel == .fighting, stats.runFinished,
               let result = stats.finishRun(outfits: sprites.manifest.outfits) else { return }
         let won = result.reward != nil
+        setBossHidden(false)   // 藏起來時打完了：一起出現，看結果、聽她報告
         let finishing = boss
         boss = nil
         pet.endBattle()

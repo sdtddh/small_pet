@@ -4,6 +4,7 @@
 // 血條跟著冒險的進度往下掉；她每砍中一刀，boss 換成被砍中的圖、往後晃一下、飄出傷害數字。
 // 冒險結束：贏了 boss 縮小淡出；輸了 boss 得意地晃一晃再淡出。
 // 點 boss：她多砍一刀，冒險時間少 1 秒（由 AppDelegate 處理，這裡只回報點擊、飄出「-1 秒」）。
+// 跟家具一樣可以拖：左右拖是沿著地面搬位置，往下拉是沉到地下藏起來（這場戰鬥還是繼續打）。
 import AppKit
 
 @MainActor
@@ -14,6 +15,7 @@ final class BossWindow: NSWindow {
 
     private let idleFrames: [NSImage?]
     private let hitImage: NSImage?
+    private let body = CALayer()     // 整隻（含名字、血條）：拖拉時往下沉、變淡
     private let holder = CALayer()   // 震動、縮小用；裡面的 art 負責左右翻面
     private let art = CALayer()
     private let barBack = CALayer()
@@ -21,7 +23,17 @@ final class BossWindow: NSWindow {
     private let nameLabel = CATextLayer()
     private var hitUntil: Double = 0
     var onClick: (() -> Void)?
+    var onMoved: ((CGFloat) -> Void)?   // 左右拖完放手：新的視窗 x
+    var onSwipeDown: (() -> Void)?      // 往下拉：藏起來
     private var finished = false
+
+    // 拖拉手勢（跟家具一樣）：按下去先不動，拖超過 dead 點才決定是搬還是往下拉；沒拖就是點一下。
+    private enum Gesture { case undecided, move, down, none }
+    private var gesture = Gesture.none
+    private var grab = NSPoint.zero
+    private var grabX: CGFloat = 0
+    private static let dead: CGFloat = 6
+    private static let trigger: CGFloat = 28
 
     // boss 的圖是面向左畫的；她在 boss 右邊時要翻過來。
     init(dungeon: Dungeon, sprites: SpriteLibrary, facingLeft: Bool) {
@@ -36,17 +48,18 @@ final class BossWindow: NSWindow {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isExcludedFromWindowsMenu = true
         let view = BossClickView(frame: NSRect(origin: .zero, size: size))
-        view.onClick = { [weak self] in self?.onClick?() }
         view.wantsLayer = true
         contentView = view
-        let root = view.layer!
+        body.frame = NSRect(origin: .zero, size: size)
+        view.layer!.addSublayer(body)
+        let root = body
 
         holder.frame = NSRect(origin: .zero, size: Self.artSize)
         root.addSublayer(holder)
         art.frame = holder.bounds
         art.contentsGravity = .resizeAspect
-        art.actions = ["contents": NSNull()]
-        if !facingLeft { art.setAffineTransform(CGAffineTransform(scaleX: -1, y: 1)) }
+        art.actions = ["contents": NSNull(), "transform": NSNull()]
+        setFacing(left: facingLeft)
         art.contents = idleFrames[0]
         holder.addSublayer(art)
 
@@ -79,6 +92,80 @@ final class BossWindow: NSWindow {
         nameLabel.shadowOffset = .zero
         nameLabel.frame = NSRect(x: 0, y: Self.artSize.height + 11, width: Self.artSize.width, height: 15)
         root.addSublayer(nameLabel)
+    }
+
+    // 換邊：她跑到另一邊時 boss 要轉過來面向她。
+    func setFacing(left: Bool) {
+        art.setAffineTransform(left ? .identity : CGAffineTransform(scaleX: -1, y: 1))
+    }
+
+    // MARK: 拖動手勢
+
+    override func mouseDown(with event: NSEvent) {
+        grab = NSEvent.mouseLocation
+        grabX = grab.x - frame.minX
+        gesture = finished ? .none : .undecided
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let now = NSEvent.mouseLocation
+        let dx = now.x - grab.x, dy = now.y - grab.y
+        if gesture == .undecided, hypot(dx, dy) > Self.dead {
+            // 比較偏左右就是搬（一直貼著地面）；往下就是拉；往上不做事
+            gesture = abs(dx) >= abs(dy) ? .move : dy < 0 ? .down : .none
+        }
+        switch gesture {
+        case .move:
+            guard let visible = screen?.visibleFrame ?? NSScreen.main?.visibleFrame else { return }
+            let x = min(max(now.x - grabX, visible.minX), visible.maxX - frame.width)
+            setFrameOrigin(NSPoint(x: x, y: frame.minY))
+        case .down:
+            let d = rubberBand(-dy)
+            setFeedback(CATransform3DMakeTranslation(0, -d, 0), opacity: 1 - 0.5 * min(d / Self.trigger, 1))
+        case .undecided, .none:
+            break
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let dy = NSEvent.mouseLocation.y - grab.y
+        switch gesture {
+        case .undecided:
+            onClick?()
+        case .move:
+            onMoved?(frame.minX)
+        case .down where -dy >= Self.trigger:
+            // 整隻沉到地下再藏起來
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(0.18)
+            CATransaction.setCompletionBlock { [weak self] in
+                self?.onSwipeDown?()
+                self?.setFeedback(CATransform3DIdentity, opacity: 1)   // 叫出來時是原本的樣子
+            }
+            body.transform = CATransform3DMakeTranslation(0, -frame.height, 0)
+            body.opacity = 0
+            CATransaction.commit()
+        default:
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(0.2)
+            body.transform = CATransform3DIdentity
+            body.opacity = 1
+            CATransaction.commit()
+        }
+        gesture = .none
+    }
+
+    private func rubberBand(_ d: CGFloat) -> CGFloat {
+        let d = max(d, 0)
+        return d <= Self.trigger ? d : Self.trigger + (d - Self.trigger) * 0.15
+    }
+
+    private func setFeedback(_ transform: CATransform3D, opacity: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        body.transform = transform
+        body.opacity = Float(opacity)
+        CATransaction.commit()
     }
 
     // 每一幀呼叫：progress 是冒險進度（0 剛出發 → 1 時間到），血條跟著掉，但結算前最少留一點。
@@ -189,8 +276,7 @@ final class BossWindow: NSWindow {
 }
 
 // boss 的畫面：第一下點擊就要算（App 沒在前景時也一樣）。透明的地方 macOS 會讓點擊穿過去。
+// 滑鼠事件交給視窗處理（點一下、拖、往下拉）。
 private final class BossClickView: NSView {
-    var onClick: (() -> Void)?
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) { onClick?() }
 }

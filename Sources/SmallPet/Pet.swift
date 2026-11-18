@@ -184,11 +184,25 @@ final class Pet {
         guard on != concealed else { return }
         if on, isDragging { dragEnded() }   // 視窗收掉後收不到放開滑鼠的事件
         concealed = on
-        speech.muted = on
+        speech.muted = on || battleHidden
         if on {
             window.orderOut(nil)
             closeCanopies()
-        } else if travel != .away {
+        } else if travel != .away, !battleHidden {
+            window.orderFrontRegardless()
+        }
+    }
+
+    // boss 被往下拉藏起來時，她也一起藏起來：只收掉視窗、不說話，戰鬥照常進行（時間不暫停，跟 ⌥F 不一樣）。
+    private(set) var battleHidden = false
+
+    func setBattleHidden(_ on: Bool) {
+        guard on != battleHidden else { return }
+        battleHidden = on
+        speech.muted = on || concealed
+        if on {
+            window.orderOut(nil)
+        } else if !concealed, travel != .away {
             window.orderFrontRegardless()
         }
     }
@@ -342,7 +356,19 @@ final class Pet {
             posY = ground
             vx = 0
             vy = 0
-            if action != .attack { setAction(.attack); lastAttackFrame = -1 }
+            if let target = battleTarget {
+                // boss 被搬走了：跑過去，到了轉身面向它繼續砍
+                if action != .run { setAction(.run) }
+                direction = target.x > posX ? 1 : -1
+                posX += tuning.runSpeed * direction * t
+                if (target.x - posX) * direction <= 0 {
+                    posX = target.x
+                    direction = target.facing
+                    battleTarget = nil
+                    setAction(.attack)
+                    lastAttackFrame = -1
+                }
+            } else if action != .attack { setAction(.attack); lastAttackFrame = -1 }
         } else if isDragging {
             // 位置由 dragMoved 直接決定，這裡什麼都不做。
         } else if !onGround {
@@ -462,8 +488,22 @@ final class Pet {
 
     // MARK: - 地下城：砍 boss
 
+    // 打 boss 時 boss 被搬走：跑到視窗 x 座標為 x 的地方，面向 facing 繼續砍。
+    private var battleTarget: (x: CGFloat, facing: CGFloat)?
+
+    func moveBattle(to x: CGFloat, facing: CGFloat) {
+        guard travel == .fighting else { return }
+        if abs(x - posX) < 2 {
+            direction = facing
+            battleTarget = nil
+            return
+        }
+        battleTarget = (x, facing)
+    }
+
     // 開打：原地拿劍，面向 boss（facing 1 右、-1 左）。
     func startBattle(facing: CGFloat) {
+        battleTarget = nil
         vx = 0
         vy = 0
         posY = ground
@@ -476,7 +516,7 @@ final class Pet {
 
     // 你點了 boss：馬上砍中一刀（直接跳到砍中的那一格），之後照常繼續揮。
     func quickSlash() {
-        guard travel == .fighting, action == .attack else { return }
+        guard travel == .fighting, action == .attack, battleTarget == nil else { return }
         let fps = sprites.info(.attack).fps
         actionTime = Double(Self.attackImpactFrame) / max(fps, 1) + 0.001
         lastAttackFrame = Self.attackImpactFrame   // 這一刀由點擊算，不要再自動多算一次
@@ -486,6 +526,7 @@ final class Pet {
     func endBattle() {
         guard travel == .fighting else { return }
         travel = .none
+        battleTarget = nil
         finishAirAction()
     }
 
