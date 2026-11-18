@@ -297,6 +297,8 @@ let bodyItems = [
     BodyItem(id: "bunny_tail", name: "兔尾巴", slot: "tail", part: .tail, origin: "amiya", colorFromHair: true),
     BodyItem(id: "bunny_ears", name: "兔耳", slot: "ears", part: .ears, origin: "amiya", colorFromHair: true),
     BodyItem(id: "diamond_earrings", name: "菱形耳環", slot: "earrings", part: .earrings, origin: "rim", colorFromHair: false),
+    BodyItem(id: "cat_ears", name: "貓耳", slot: "ears", part: .ears, origin: "kyaru", colorFromHair: true),
+    BodyItem(id: "cat_tail", name: "貓尾巴", slot: "tail", part: .tail, origin: "kyaru", colorFromHair: true),
 ]
 // 身上的物件。預設是角色原本的樣子；產生物件圖層時會暫時改掉。
 let defaultItems = Set(bodyItems.filter { me.defaults[$0.slot] == $0.id }.map(\.id))
@@ -328,6 +330,15 @@ func drawBody(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart> = allParts) {
             look.clothes.torso(ctx, p)
             if !raised(p.armBack) { drawArm(ctx, shoulderBack, p.armBack, reach: p.armBackReach) }
         }
+    }
+
+    // 貓尾巴：從身後往畫面左邊伸出來、尾巴尖往上勾；被身體擋住的部分挖掉
+    if parts.contains(.tail) && items.contains("cat_tail") {
+        ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+        withState(ctx, upper(p)) { drawCatTail(ctx, p, back: false) }
+        ctx.setBlendMode(.destinationOut)
+        drawBody(ctx, p, [.base])
+        ctx.endTransparencyLayer()
     }
 
     withState(ctx, head(p)) { drawHead(ctx, p, parts) }
@@ -380,7 +391,12 @@ func drawBodyBack(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
         }
     }
 
+    if parts.contains(.tail) && items.contains("cat_tail") {
+        withState(ctx, upper(p)) { drawCatTail(ctx, p, back: true) }
+    }
+
     withState(ctx, head(p)) {
+        if parts.contains(.ears) && items.contains("cat_ears") { drawCatEars(ctx, p, back: true) }
         // 兔耳背面：沒有粉色內側
         if parts.contains(.ears) && items.contains("bunny_ears") {
             for (root, base, k) in [(CGPoint(x: 40, y: 72), CGFloat(0.3), CGFloat(1)),
@@ -534,6 +550,8 @@ func drawHead(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
         }
     }
 
+    if parts.contains(.ears) && items.contains("cat_ears") { drawCatEars(ctx, p, back: false) }
+
     // 後腦的頭髮（在臉後面）
     if parts.contains(.hairBack) { look.hair.backOfHead(ctx, p) }
 
@@ -562,6 +580,17 @@ func drawHead(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
     ctx.setLineCap(.round)
     if p.mouthOpen {
         shape(ctx, ellipse(54.5, 42, 5, 4.5), hex(0xC8504F), lineWidth: 1.5)
+        if me.mouth == "fang" {   // 凱留：上排一顆小虎牙
+            shape(ctx, polygon([pt(55.2, 44.1), pt(57.4, 44.1), pt(56.4, 42.2)]), white, lineWidth: 0.7)
+        }
+    } else if me.mouth == "fang" {
+        // 凱留：ω 嘴，右邊露出一顆小虎牙
+        let mouth = CGMutablePath()
+        mouth.move(to: CGPoint(x: 51.5, y: 43.5))
+        mouth.addQuadCurve(to: CGPoint(x: 54.5, y: 43), control: CGPoint(x: 52.8, y: 41.2))
+        mouth.addQuadCurve(to: CGPoint(x: 57.5, y: 43.5), control: CGPoint(x: 56.2, y: 41.2))
+        shape(ctx, polygon([pt(55.3, 42.4), pt(57.3, 42.6), pt(56.5, 40.3)]), white, lineWidth: 0.8)
+        line(ctx, mouth, outline, width: 1.5)
     } else if me.mouth == "smile" {
         // 理芽：小小的微笑
         let mouth = CGMutablePath()
@@ -575,6 +604,58 @@ func drawHead(_ ctx: CGContext, _ p: Pose, _ parts: Set<BodyPart>) {
         mouth.addQuadCurve(to: CGPoint(x: 57.5, y: 43.5), control: CGPoint(x: 56.2, y: 41.2))
         line(ctx, mouth, outline, width: 1.5)
     }
+}
+
+// 貓耳：兩個圓角三角形，內側是白色絨毛；背面只有深色的耳背。顏色跟頭髮一樣。
+func drawCatEars(_ ctx: CGContext, _ p: Pose, back: Bool) {
+    let fluff = hex(0xF6F0F4)
+    for (root, base, k) in [(pt(35, 75), CGFloat(0.42), CGFloat(1)), (pt(67, 77), CGFloat(-0.32), CGFloat(0.8))] {
+        let r = back ? pt(100 - root.x, root.y - 1) : root
+        let b = back ? -base : base
+        withState(ctx, { c in
+            c.translateBy(x: r.x, y: r.y)
+            c.rotate(by: b + p.ears * k * 0.5)
+        }) {
+            let ear = CGMutablePath()
+            ear.move(to: pt(-9, -2))
+            ear.addQuadCurve(to: pt(-1, 19), control: pt(-8, 12))
+            ear.addQuadCurve(to: pt(2, 19), control: pt(0.5, 21))
+            ear.addQuadCurve(to: pt(9, -2), control: pt(9, 11))
+            ear.closeSubpath()
+            shape(ctx, ear, back ? look.hair.dark : look.hair.color)
+            guard !back else { return }
+            let inner = CGMutablePath()
+            inner.move(to: pt(-5, 0))
+            inner.addQuadCurve(to: pt(0.3, 15), control: pt(-4.5, 9))
+            inner.addQuadCurve(to: pt(5, 0), control: pt(4.5, 8))
+            inner.closeSubpath()
+            shape(ctx, inner, earInner, stroke: false)
+            // 白色絨毛：從耳朵底部翹出來的幾撮
+            for (a, tip) in [(pt(-3, 0), pt(-1.5, 9)), (pt(0.5, 0), pt(1, 11)), (pt(3.5, 0), pt(3, 8))] {
+                shape(ctx, petal(a, tip, width: 3.2), fluff, stroke: false)
+            }
+        }
+    }
+}
+
+// 貓尾巴：長長的一條，尾巴尖是白的。正面從身後往畫面左邊伸出去再往上勾；背面從屁股往右上翹。
+func drawCatTail(_ ctx: CGContext, _ p: Pose, back: Bool) {
+    let sway = p.tail * 1.5
+    let path: CGPath
+    let tipAt: CGPoint
+    if back {
+        path = hairStrand(pt(50, 18), pt(62, 10), pt(74, 18 + sway), pt(72, 34 + sway), width: { _ in 5.5 })
+        tipAt = pt(72, 34 + sway)
+    } else {
+        path = hairStrand(pt(44, 17), pt(26, 2), pt(4, 14 + sway), pt(6, 36 + sway), width: { _ in 5.5 })
+        tipAt = pt(6, 36 + sway)
+    }
+    shape(ctx, path, look.hair.color, stroke: false)
+    ctx.addPath(path)
+    ctx.setStrokeColor(outline)
+    ctx.setLineWidth(2)
+    ctx.strokePath()
+    shape(ctx, ellipse(tipAt.x, tipAt.y, 5.6, 5.6), hex(0xF6F0F4), lineWidth: 2)   // 圓圓的尾巴尖
 }
 
 // 理芽的辮子：一節一節的小橢圓，尾端綁一小撮。sway 讓它跟著動作微微擺。
@@ -1827,6 +1908,90 @@ func shortBob() -> HairStyle {
     )
 }
 
+// 凱留：黑紫色長髮，低低的雙馬尾垂到腳邊、髮尾捲成螺旋捲；瀏海右邊一撮白色挑染，一邊馬尾綁粉紅蝴蝶結。
+func kyaruHair() -> HairStyle {
+    let base = hex(0x3E3556), dark = hex(0x29223C), shine = hex(0xB8A8F0), streak = hex(0xF4F2F7)
+    let ribbon = hex(0xE85BB4), ribbonFold = hex(0xC23C93)
+    // 一條馬尾：從耳下往下垂，最後一段捲成兩圈螺旋捲
+    func tail(_ ctx: CGContext, side s: CGFloat, rootX: CGFloat, sway: CGFloat) {
+        let top = pt(rootX, 50), end = pt(rootX + s * 3 + sway, 24)
+        let path = hairStrand(top, pt(rootX + s * 8, 40), pt(rootX + s * 1, 32), end, width: taper(10, belly: 0.25, tip: 7))
+        shape(ctx, path, base)
+        let flow = CGMutablePath()
+        flow.move(to: pt(rootX + s * 1.5, 46))
+        flow.addCurve(to: pt(end.x, 28), control1: pt(rootX + s * 7, 40), control2: pt(rootX, 33))
+        line(ctx, flow, dark, width: 1.2)
+        // 髮尾螺旋捲：一束頭髮繞成彈簧往下鑽，越往下越細，尾端尖尖的
+        let turns: CGFloat = 2.25, length: CGFloat = 21
+        func coil(_ t: CGFloat) -> (CGPoint, CGFloat) {
+            let phi = t * turns * 2 * .pi, r = 4.2 * (1 - 0.5 * t)
+            return (pt(end.x + s * r * sin(phi), end.y + 1 - t * length), cos(phi))
+        }
+        func tube(_ t0: CGFloat, _ t1: CGFloat) -> CGPath {
+            let n = 24
+            var left: [CGPoint] = [], right: [CGPoint] = []
+            for i in 0...n {
+                let t = t0 + (t1 - t0) * CGFloat(i) / CGFloat(n)
+                let a = coil(max(0, t - 0.003)).0, b = coil(min(1, t + 0.003)).0, q = coil(t).0
+                let len = max(hypot(b.x - a.x, b.y - a.y), 0.0001)
+                let nx = -(b.y - a.y) / len, ny = (b.x - a.x) / len
+                let w = max(0.6, 7.2 * (1 - 0.82 * t) / 2)
+                left.append(pt(q.x + nx * w, q.y + ny * w)); right.append(pt(q.x - nx * w, q.y - ny * w))
+            }
+            let path = CGMutablePath()
+            path.addLines(between: left + right.reversed()); path.closeSubpath()
+            return path
+        }
+        // 每半圈切一段：繞到後面的先畫（暗色），繞到前面的蓋上去
+        var cuts: [CGFloat] = [0]
+        var k: CGFloat = 0.25
+        while k < turns { cuts.append(k / turns); k += 0.5 }
+        cuts.append(1)
+        let pieces = (0..<cuts.count - 1).map { (cuts[$0], cuts[$0 + 1]) }
+        for (t0, t1) in pieces where coil((t0 + t1) / 2).1 < 0 { shape(ctx, tube(t0, t1), dark, lineWidth: 1.6) }
+        for (t0, t1) in pieces where coil((t0 + t1) / 2).1 >= 0 {
+            shape(ctx, tube(t0, t1), base, lineWidth: 1.6)
+            let m = (t0 + t1) / 2, d = (t1 - t0) * 0.25
+            line(ctx, quad(coil(m - d).0, coil(m + d).0, coil(m).0), shine.copy(alpha: 0.55)!, width: 0.9)
+        }
+        shape(ctx, ellipse(end.x, end.y + 1.5, 5.4, 3.4), base, stroke: false)   // 跟馬尾接起來
+    }
+    let bangs = bangsPath([pt(77, 56), pt(73, 60), pt(69, 55.5), pt(64, 61.5), pt(59.5, 55), pt(54, 62),
+                           pt(49, 56), pt(44, 61.5), pt(39.5, 55.5), pt(35, 60), pt(30, 55)])
+    return HairStyle(
+        id: "kyaru_hair", name: "螺旋捲雙馬尾", color: base, dark: dark, shine: shine,
+        behind: { ctx, p in
+            tail(ctx, side: -1, rootX: 25, sway: -p.ears * 2)
+            tail(ctx, side: 1, rootX: 81, sway: -p.ears * 2)
+        },
+        backOfHead: { ctx, _ in shape(ctx, ellipse(51, 56, 58, 50), dark) },
+        front: { ctx, _ in
+            // 臉旁長長的側髮
+            shape(ctx, petal(pt(30, 64), pt(29, 32), width: 8), base, lineWidth: 1.8)
+            shape(ctx, petal(pt(77, 62), pt(78, 34), width: 7), base, lineWidth: 1.8)
+            shape(ctx, bangs, base)
+            // 白色挑染：瀏海右邊（畫面左邊）的一撮
+            clipped(ctx, to: bangs) {
+                shape(ctx, petal(pt(42, 76), pt(37.5, 54), width: 5), streak, stroke: false)
+            }
+            ctx.addPath(bangs); ctx.setStrokeColor(outline); ctx.setLineWidth(2.2); ctx.strokePath()
+            hairGloss(ctx, shine)
+            loopBow(ctx, at: pt(81, 47), size: 4.2, ribbon, ribbonFold)
+        },
+        backView: { ctx, p in
+            tail(ctx, side: -1, rootX: 27, sway: p.ears * 2)
+            tail(ctx, side: 1, rootX: 73, sway: p.ears * 2)
+            let head = ellipse(50, 56, 56, 48)
+            shape(ctx, head, base)
+            for (end, ctrl) in [(pt(40, 36), pt(39, 62)), (pt(50, 34), pt(51, 60)), (pt(60, 36), pt(61, 62))] {
+                line(ctx, quad(pt(50, 78), end, ctrl), dark, width: 1.3)
+            }
+            hairGloss(ctx, shine, back: true)
+            loopBow(ctx, at: pt(27, 47), size: 4.2, ribbon, ribbonFold)   // 背對時蝴蝶結換到另一邊
+        }
+    )
+}
+
 let hairStyles: [HairStyle] = [
     amiyaHair,
     rimHair,
@@ -1839,6 +2004,7 @@ let hairStyles: [HairStyle] = [
                shine: hex(0xF6DE9A), accent: hex(0xE0B54A), ring: true),
     himeCut(),
     shortBob(),
+    kyaruHair(),
 ]
 
 // ── 服裝 ──
@@ -2102,7 +2268,64 @@ let gothicClothes: ClothesStyle = {
     )
 }()
 
-let clothesStyles: [ClothesStyle] = [amiyaClothes, rimClothes, jiraiClothes, ryousanClothes, sailorClothes, streetClothes, yukataClothes, gothicClothes]
+// 凱留：深藍金邊的短外套（後面有兩片燕尾）、白色無袖上衣、紫色馬甲、淺紫裙 + 黑色荷葉邊，
+// 胸前紫色領結配紅寶石，黑色過膝襪、棕色短靴。
+let kyaruClothes: ClothesStyle = {
+    let navy = hex(0x2B3568), gold = hex(0xD9A93A), blouse = hex(0xF4F2F8), corset = hex(0x6E3A72)
+    let skirt = hex(0xB4A2DE), skirtShade = hex(0x9884C8), frill = hex(0x2A2433), bow = hex(0x5A3A86)
+    func skirtPart(_ ctx: CGContext) {
+        for x in stride(from: CGFloat(33), through: 67, by: 4.2) {     // 最下面的黑色荷葉邊
+            shape(ctx, ellipse(x, 10.5, 4.8, 4.4), frill, lineWidth: 1.1)
+        }
+        let s = CGMutablePath()
+        s.move(to: pt(38.5, 27)); s.addLine(to: pt(61.5, 27)); s.addLine(to: pt(67, 14))
+        s.addQuadCurve(to: pt(50, 12.5), control: pt(58.5, 11)); s.addQuadCurve(to: pt(33, 14), control: pt(41.5, 11))
+        s.closeSubpath()
+        shape(ctx, s, skirt)
+        for (a, b) in [(pt(44, 25), pt(41, 14)), (pt(56, 25), pt(59, 14))] { line(ctx, segment(a, b), skirtShade, width: 1.4) }
+        line(ctx, quad(pt(40, 19), pt(58, 17), pt(49, 14)), gold, width: 1)   // 裙子上垂著的金鍊
+    }
+    func coatTails(_ ctx: CGContext) {   // 外套後面兩片燕尾，從裙子兩側垂下來
+        shape(ctx, polygon([pt(36, 26), pt(31, 7), pt(38, 12)]), navy, lineWidth: 1.6)
+        shape(ctx, polygon([pt(64, 26), pt(69, 7), pt(62, 12)]), navy, lineWidth: 1.6)
+    }
+    return ClothesStyle(
+        id: "kyaru_dress", name: "魔法師外套", sleeve: navy, cuff: gold, sleeveWidth: 7,
+        legging: hex(0x1E1A26), shoe: hex(0x7B4F2C), shoeHeight: 8,
+        torso: { ctx, _ in
+            coatTails(ctx)
+            skirtPart(ctx)
+            shape(ctx, rounded(43, 24, 16, 14, 3), blouse, lineWidth: 1.6)        // 白上衣
+            shape(ctx, rounded(45, 22, 12, 11, 2), corset, lineWidth: 1.4)        // 紫馬甲
+            for y in [CGFloat(25), 29] { line(ctx, segment(pt(46.5, y), pt(55.5, y)), gold, width: 0.9) }
+            // 敞開的深藍短外套，內側金邊
+            shape(ctx, rounded(33.5, 19, 12, 19, 5), navy)
+            shape(ctx, rounded(56.5, 19, 10, 19, 5), navy)
+            line(ctx, segment(pt(44.5, 20.5), pt(44.5, 36)), gold, width: 1.8)
+            line(ctx, segment(pt(57.5, 20.5), pt(57.5, 36)), gold, width: 1.8)
+            for y in [CGFloat(32), 26] {   // 金色扣環
+                shape(ctx, ellipse(41.5, y, 2.6, 2.6), gold, lineWidth: 0.9)
+                shape(ctx, ellipse(60.5, y, 2.6, 2.6), gold, lineWidth: 0.9)
+            }
+            // 紫色領結 + 紅寶石
+            drawBow(ctx, at: pt(51, 36), size: 3, bow)
+            shape(ctx, ellipse(51, 36, 3, 3.4), gemRed, lineWidth: 1)
+        },
+        torsoBack: { ctx, _ in
+            skirtPart(ctx)
+            shape(ctx, rounded(34, 20, 32, 18, 6), navy)
+            line(ctx, quad(pt(38, 21), pt(62, 21), pt(50, 19)), gold, width: 1.6)
+            line(ctx, segment(pt(50, 21), pt(50, 37)), gold, width: 1.2)
+            // 燕尾在背面整片看得到
+            shape(ctx, polygon([pt(38, 21), pt(44, 6), pt(50, 20)]), navy, lineWidth: 1.6)
+            shape(ctx, polygon([pt(62, 21), pt(56, 6), pt(50, 20)]), navy, lineWidth: 1.6)
+            line(ctx, segment(pt(39, 20), pt(44, 7.5)), gold, width: 1)
+            line(ctx, segment(pt(61, 20), pt(56, 7.5)), gold, width: 1)
+        }
+    )
+}()
+
+let clothesStyles: [ClothesStyle] = [amiyaClothes, rimClothes, jiraiClothes, ryousanClothes, sailorClothes, streetClothes, yukataClothes, gothicClothes, kyaruClothes]
 
 // 目前畫的是哪一套。產生本體與一般服裝時是這個角色預設的樣子（character.json）；產生外觀圖層時才會換。
 let defaultLook = Look(hair: hairStyles.first { $0.id == me.defaults["hair"] } ?? amiyaHair,
@@ -2438,6 +2661,8 @@ func drawCanopy(_ ctx: CGContext) {
 // 用跟寵物畫布一樣的座標（offsetX 8、地面 y=4），程式只要把寵物視窗的 x 對齊餐桌視窗的 x，
 // 她就剛好坐在凳子上、面向右邊的桌子。
 let diningWidth: CGFloat = 146
+// 凳子左邊是空的：輸出時切掉這麼多（點），視窗才不會在左邊多擋一塊點擊。程式那邊 Prop 的 inset 要跟這個一樣。
+let seatTrim: CGFloat = 40
 let diningHeight: CGFloat = 44
 let wood = hex(0xC8935A)
 let woodDark = hex(0x9C6B3C)
@@ -3448,10 +3673,10 @@ if previewFrames == nil {
 try write(renderPNG(width: tomatoClockWidth, height: tomatoClockHeight, offset: 0) { drawTomatoClock($0) }, "props/clock_tomato.png")
 try write(renderPNG(width: pumpkinClockWidth, height: pumpkinClockHeight, offset: 0) { drawPumpkinClock($0) }, "props/clock_pumpkin.png")
 try write(renderPNG(height: canopyHeight, offset: 0) { drawCanopy($0) }, "props/parachute.png")
-try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: false) }, "props/dining.png")
-try write(renderPNG(width: diningWidth, height: diningHeight) { drawDining($0, meal: true) }, "props/dining_meal.png")
-try write(renderPNG(width: computerWidth, height: computerHeight) { drawComputer($0, on: false) }, "props/computer.png")
-try write(renderPNG(width: computerWidth, height: computerHeight) { drawComputer($0, on: true) }, "props/computer_on.png")
+try write(renderPNG(width: diningWidth - seatTrim, height: diningHeight, offset: offsetX - seatTrim) { drawDining($0, meal: false) }, "props/dining.png")
+try write(renderPNG(width: diningWidth - seatTrim, height: diningHeight, offset: offsetX - seatTrim) { drawDining($0, meal: true) }, "props/dining_meal.png")
+try write(renderPNG(width: computerWidth - seatTrim, height: computerHeight, offset: offsetX - seatTrim) { drawComputer($0, on: false) }, "props/computer.png")
+try write(renderPNG(width: computerWidth - seatTrim, height: computerHeight, offset: offsetX - seatTrim) { drawComputer($0, on: true) }, "props/computer_on.png")
 for (part, name) in [(BedPart.empty, "bed"), (.back, "bed_back"), (.front, "bed_front")] {
     try write(renderPNG(width: bedWidth, height: bedHeight) { drawBed($0, part) }, "props/\(name).png")
 }

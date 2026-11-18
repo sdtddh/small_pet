@@ -62,8 +62,8 @@ final class Scenery {
         self.sprites = sprites
         let mid = NSScreen.main?.visibleFrame.midX ?? 0
         // 第一次的預設位置：電腦桌在左、餐桌在中間、床在右。
-        dining = Prop(sprites: sprites, title: "餐桌", name: "dining", activeName: "dining_meal", key: "scenery.x", defaultX: mid - 70)
-        computer = Prop(sprites: sprites, title: "電腦桌", name: "computer", activeName: "computer_on", key: "scenery.computer.x", defaultX: mid - 330)
+        dining = Prop(sprites: sprites, title: "餐桌", name: "dining", activeName: "dining_meal", key: "scenery.x", defaultX: mid - 70, inset: 40)
+        computer = Prop(sprites: sprites, title: "電腦桌", name: "computer", activeName: "computer_on", key: "scenery.computer.x", defaultX: mid - 330, inset: 40)
         bed = Prop(sprites: sprites, title: "床", name: "bed", activeName: "bed_back", key: "scenery.bed.x", defaultX: mid + 170)
         monitor = Prop(sprites: sprites, title: "床頭櫃（系統資訊）", name: "monitor", activeName: nil, key: "scenery.monitor.x", defaultX: mid + 330)
         gauge = SystemGauge(on: monitor.window)
@@ -188,14 +188,19 @@ final class Prop {
     }
     private let enabledKey: String
 
-    var x: CGFloat { window.frame.minX }
+    // 她要站的位置（寵物視窗的 x）。餐桌、電腦桌的圖左邊空白被產生器切掉了 inset 點，所以視窗比這裡靠右。
+    var x: CGFloat { window.frame.minX - inset }
 
     // sink：視窗要比地面低多少（圖下方有留白的家具）。
     private let sink: CGFloat
+    // inset：圖左邊被切掉多少（點），要跟產生器的 seatTrim 一樣。記住的位置還是存 x（沒切之前的左邊）。
+    private let inset: CGFloat
 
-    init(sprites: SpriteLibrary, title: String, name: String, activeName: String?, key: String, defaultX: CGFloat, sink: CGFloat = 0) {
+    init(sprites: SpriteLibrary, title: String, name: String, activeName: String?, key: String, defaultX: CGFloat,
+         sink: CGFloat = 0, inset: CGFloat = 0) {
         self.title = title
         self.sink = sink
+        self.inset = inset
         enabledKey = "scenery.enabled.\(name)"
         enabled = UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
         image = sprites.prop(name)
@@ -204,8 +209,8 @@ final class Prop {
 
         let visible = NSScreen.main?.visibleFrame ?? .zero
         let saved = UserDefaults.standard.object(forKey: key) as? Double
-        window.setFrameOrigin(NSPoint(x: saved.map { CGFloat($0) } ?? defaultX, y: baseY(in: visible)))
-        window.onMoved = { x in UserDefaults.standard.set(Double(x), forKey: key) }
+        window.setFrameOrigin(NSPoint(x: (saved.map { CGFloat($0) } ?? defaultX) + inset, y: baseY(in: visible)))
+        window.onMoved = { [inset] x in UserDefaults.standard.set(Double(x - inset), forKey: key) }
         clampToScreen()
     }
 
@@ -243,6 +248,8 @@ final class SceneryWindow: NSWindow {
     // 拉動時的回饋（往下沉、往上伸）套在 holder 上；圖片在 holder 裡的 art，才能整張翻面、傾斜。
     private let holder = CALayer()
     private let art = CALayer()
+    // 拖曳時才出現的虛線框：這個視窗吃掉滑鼠點擊的範圍，看得出會不會擋到底下的東西。
+    private let hitFrame = CAShapeLayer()
 
     // 按下去之後先不動，拖超過 dead 點才決定是哪一種手勢；拉超過 trigger 點放手才算數。
     private enum Gesture { case undecided, move, down, up, none }
@@ -273,6 +280,13 @@ final class SceneryWindow: NSWindow {
         art.actions = ["contents": NSNull(), "transform": NSNull()]   // 每一幀直接換，不要淡入淡出
         holder.addSublayer(art)
         imageView.layer?.addSublayer(holder)
+        hitFrame.fillColor = NSColor.systemBlue.withAlphaComponent(0.08).cgColor
+        hitFrame.strokeColor = NSColor.systemBlue.withAlphaComponent(0.85).cgColor
+        hitFrame.lineWidth = 1.5
+        hitFrame.lineDashPattern = [5, 3]
+        hitFrame.opacity = 0
+        imageView.layer?.addSublayer(hitFrame)
+        layoutHitFrame()
         contentView = imageView
         setImage(image)
     }
@@ -290,8 +304,21 @@ final class SceneryWindow: NSWindow {
         CATransaction.setDisableActions(true)
         holder.frame = imageView.bounds
         art.frame = holder.bounds
+        layoutHitFrame()
         CATransaction.commit()
         setImage(image)
+    }
+
+    private func layoutHitFrame() {
+        hitFrame.frame = imageView.bounds
+        hitFrame.path = CGPath(roundedRect: imageView.bounds.insetBy(dx: 0.75, dy: 0.75), cornerWidth: 4, cornerHeight: 4, transform: nil)
+    }
+
+    private func showHitFrame(_ on: Bool) {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(on ? 0.1 : 0.25)
+        hitFrame.opacity = on ? 1 : 0
+        CATransaction.commit()
     }
 
     // 把寵物拖到這件家具上時，家具周圍亮起一圈光，表示放手就會用它。
@@ -327,6 +354,7 @@ final class SceneryWindow: NSWindow {
             } else {
                 gesture = .up
             }
+            if gesture != .none && gesture != .undecided { showHitFrame(true) }
         }
         switch gesture {
         case .move:
@@ -348,6 +376,7 @@ final class SceneryWindow: NSWindow {
 
     override func mouseUp(with event: NSEvent) {
         let dy = NSEvent.mouseLocation.y - grab.y
+        showHitFrame(false)
         switch gesture {
         case .move:
             onMoved?(frame.minX)

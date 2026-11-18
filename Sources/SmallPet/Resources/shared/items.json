@@ -54,6 +54,11 @@
         "id" : "gothic",
         "name" : "哥德蘿莉",
         "origin" : null
+      },
+      {
+        "id" : "kyaru_dress",
+        "name" : "魔法師外套",
+        "origin" : null
       }
     ],
     "hair" : [
@@ -95,6 +100,11 @@
       {
         "id" : "short_bob",
         "name" : "日系短鮑伯",
+        "origin" : null
+      },
+      {
+        "id" : "kyaru_hair",
+        "name" : "螺旋捲雙馬尾",
         "origin" : null
       }
     ]
@@ -354,6 +364,26 @@
       "origin" : "rim",
       "power" : 0,
       "slot" : "earrings"
+    },
+    {
+      "behind" : false,
+      "colorFromHair" : true,
+      "dungeon" : false,
+      "id" : "cat_ears",
+      "name" : "貓耳",
+      "origin" : "kyaru",
+      "power" : 0,
+      "slot" : "ears"
+    },
+    {
+      "behind" : false,
+      "colorFromHair" : true,
+      "dungeon" : false,
+      "id" : "cat_tail",
+      "name" : "貓尾巴",
+      "origin" : "kyaru",
+      "power" : 0,
+      "slot" : "tail"
     }
   ],
   "slots" : [

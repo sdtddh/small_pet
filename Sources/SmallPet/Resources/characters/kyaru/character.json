@@ -1,0 +1,18 @@
+{
+  "id": "kyaru",
+  "name": "凱留",
+  "order": 2,
+  "face": {
+    "eyes": "round",
+    "eyeDark": "#1D5A2C",
+    "eyeIris": "#7FD23C",
+    "mouth": "fang"
+  },
+  "defaults": {
+    "hair": "kyaru_hair",
+    "clothes": "kyaru_dress",
+    "ears": "cat_ears",
+    "tail": "cat_tail",
+    "earrings": null
+  }
+}
