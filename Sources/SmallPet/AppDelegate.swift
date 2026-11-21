@@ -256,9 +256,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         scenery.clockFace.update(now: Date(), remaining: remaining)
     }
 
-    // 時間到：輕輕響一聲、小卡片浮出來；她在旁邊的話也說一句、做個小動作。
+    // 時間到：小卡片浮出來；倒數、鬧鐘一直響鈴到按下卡片上的按鈕，其他提醒輕輕響一聲。
+    // 她在旁邊的話也說一句、做個小動作。
     private func remind(_ reminder: Reminder) {
-        if reminders.soundOn, let sound = NSSound(named: "Tink")?.copy() as? NSSound {
+        var reminder = reminder
+        let ring = reminder.kind == .countdown ? reminders.countdownSound
+                 : reminder.kind == .alarm ? reminders.alarmSound : nil
+        if let ring {
+            Ringer.shared.ring(ring)
+            reminder.actions = reminder.actions.map { action in
+                Reminder.Action(title: action.title) { Ringer.shared.stop(); action.run() }
+            }
+        } else if reminders.soundOn, let sound = NSSound(named: "Tink")?.copy() as? NSSound {
             sound.volume = 0.35
             sound.play()
         }
@@ -397,7 +406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         scenery.clock.window.onSwipeUp = { [weak self] in
             guard let self else { return }
-            self.remindersWindow.show(tab: .pomodoro, above: self.scenery.clock.window.frame)
+            self.remindersWindow.show(above: self.scenery.clock.window.frame)
         }
         scenery.bed.window.onSwipeUp = {
             // 等往上伸的動畫彈回來再關，看起來比較順。

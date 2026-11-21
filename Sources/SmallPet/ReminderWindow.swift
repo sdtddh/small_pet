@@ -161,9 +161,9 @@ final class RemindersWindowController {
         self.center = center
     }
 
-    // tab：要打開哪一頁（nil = 上次那頁）；above：時鐘的位置，視窗開在它正上方（nil = 螢幕中間）。
+    // tab：要打開哪一頁（nil = 排在最前面的那頁）；above：時鐘的位置，視窗開在它正上方（nil = 螢幕中間）。
     func show(tab: RemindersNav.Tab? = nil, above anchor: NSRect? = nil) {
-        if let tab { nav.tab = tab }
+        nav.tab = tab ?? nav.order.first ?? .pomodoro
         if window == nil {
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 470),
                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -184,17 +184,92 @@ final class RemindersWindowController {
     }
 }
 
-// 設定視窗現在在哪一頁（從時鐘打開時直接跳到番茄鐘）。
+// 設定視窗現在在哪一頁，和分頁的排列順序（拖曳分頁可以換順序，會記住；打開視窗時先顯示第一頁）。
 @MainActor
 final class RemindersNav: ObservableObject {
-    enum Tab: Hashable { case pomodoro, countdown, water, alarm, look }
+    enum Tab: String, CaseIterable, Hashable {
+        case pomodoro, countdown, water, alarm, look
+        var title: String {
+            switch self {
+            case .pomodoro: "番茄鐘"
+            case .countdown: "倒數"
+            case .water: "喝水"
+            case .alarm: "鬧鐘・行事曆"
+            case .look: "外觀"
+            }
+        }
+    }
+    private static let orderKey = "reminderTabOrder"
+
     @Published var tab = Tab.pomodoro
+    @Published var order: [Tab] { didSet { UserDefaults.standard.set(order.map(\.rawValue), forKey: Self.orderKey) } }
+    @Published var dragging: Tab?
+
+    init() {
+        let saved = (UserDefaults.standard.stringArray(forKey: Self.orderKey) ?? []).compactMap(Tab.init(rawValue:))
+        // 存的順序裡沒有的分頁（以後新加的）接在後面
+        order = saved + Tab.allCases.filter { !saved.contains($0) }
+        tab = order.first ?? .pomodoro
+    }
+
+    // 拖著 dragging 經過 target：把它挪到 target 的位置。
+    func move(_ dragged: Tab, to target: Tab) {
+        guard dragged != target, let from = order.firstIndex(of: dragged), let to = order.firstIndex(of: target) else { return }
+        order.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+    }
+}
+
+// 自己畫的分頁列：點一下換頁、按住拖曳換順序。
+private struct RemindersTabBar: View {
+    @ObservedObject var nav: RemindersNav
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(nav.order, id: \.self) { tab in
+                Text(tab.title)
+                    .font(.callout.weight(nav.tab == tab ? .semibold : .regular))
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 6)
+                        .fill(nav.tab == tab ? Color.accentColor.opacity(0.18) : Color.clear))
+                    .foregroundStyle(nav.tab == tab ? Color.accentColor : Color.primary)
+                    .opacity(nav.dragging == tab ? 0.4 : 1)
+                    .contentShape(Rectangle())
+                    .onTapGesture { nav.tab = tab }
+                    .onDrag {
+                        nav.dragging = tab
+                        return NSItemProvider(object: tab.rawValue as NSString)
+                    }
+                    .onDrop(of: [.text], delegate: TabDropDelegate(target: tab, nav: nav))
+            }
+        }
+        .padding(3)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.1)))
+        .animation(.easeInOut(duration: 0.15), value: nav.order)
+        .help("按住分頁拖曳可以換順序；打開視窗時會先顯示最前面那頁")
+    }
+}
+
+private struct TabDropDelegate: DropDelegate {
+    let target: RemindersNav.Tab
+    let nav: RemindersNav
+
+    func dropEntered(info: DropInfo) {
+        if let dragged = nav.dragging { nav.move(dragged, to: target) }
+    }
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+    func performDrop(info: DropInfo) -> Bool {
+        nav.dragging = nil
+        return true
+    }
 }
 
 struct RemindersView: View {
     @ObservedObject var center: ReminderCenter
     @ObservedObject var nav: RemindersNav
-    @State private var countdownMinutes = 10
+    @ObservedObject private var ringer = Ringer.shared
+    @AppStorage("countdownHours") private var countdownHours = 0
+    @AppStorage("countdownMinutes") private var countdownMinutes = 10
+    @AppStorage("countdownSeconds") private var countdownSeconds = 0
     @State private var countdownLabel = ""
     @State private var alarmTime = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
     @State private var alarmLabel = ""
@@ -203,17 +278,55 @@ struct RemindersView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            TabView(selection: $nav.tab) {
-                pomodoroTab.tabItem { Text("番茄鐘") }.tag(RemindersNav.Tab.pomodoro)
-                countdownTab.tabItem { Text("倒數") }.tag(RemindersNav.Tab.countdown)
-                waterTab.tabItem { Text("喝水") }.tag(RemindersNav.Tab.water)
-                alarmTab.tabItem { Text("鬧鐘・行事曆") }.tag(RemindersNav.Tab.alarm)
-                lookTab.tabItem { Text("外觀") }.tag(RemindersNav.Tab.look)
+            RemindersTabBar(nav: nav)
+            Group {
+                switch nav.tab {
+                case .pomodoro: pomodoroTab
+                case .countdown: countdownTab
+                case .water: waterTab
+                case .alarm: alarmTab
+                case .look: lookTab
+                }
             }
-            Toggle("提醒時輕輕響一聲", isOn: $center.soundOn).font(.callout)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.06)))
+            Toggle("番茄鐘、喝水、行事曆提醒時輕輕響一聲", isOn: $center.soundOn).font(.callout)
         }
         .padding()
-        .frame(width: 380, height: 470)
+        .frame(width: 400, height: 520)
+        .onDisappear { ringer.stop() }
+    }
+
+    // 鈴聲選單＋試聽按鈕（倒數、鬧鐘各自一個）。
+    private func soundPicker(_ title: String, _ selection: Binding<String>) -> some View {
+        HStack {
+            Picker(title, selection: selection) {
+                Text("不響").tag("")
+                ForEach(Ringer.sounds, id: \.self) { Text($0).tag($0) }
+            }
+            .onChange(of: selection.wrappedValue) { _ in ringer.stop() }
+            Button {
+                ringer.togglePreview(selection.wrappedValue)
+            } label: {
+                Label(ringer.previewing == selection.wrappedValue && !selection.wrappedValue.isEmpty ? "停止" : "試聽",
+                      systemImage: ringer.previewing == selection.wrappedValue && !selection.wrappedValue.isEmpty ? "stop.fill" : "play.fill")
+            }
+            .disabled(selection.wrappedValue.isEmpty)
+        }
+    }
+
+    // 時 / 分 / 秒的輸入格：可以直接打數字，也可以按上下箭頭。
+    private func unitField(_ value: Binding<Int>, _ unit: String, max: Int) -> some View {
+        HStack(spacing: 2) {
+            NumberField(value: value, max: max).frame(width: 40)
+            Stepper("", value: value, in: 0...max).labelsHidden()
+            Text(unit)
+        }
+    }
+
+    private var customCountdownSeconds: Double {
+        Double(countdownHours * 3600 + countdownMinutes * 60 + countdownSeconds)
     }
 
     // MARK: 外觀
@@ -318,18 +431,27 @@ struct RemindersView: View {
                 Text("要倒數多久？").font(.headline)
                 HStack {
                     ForEach([3, 5, 10, 15, 30], id: \.self) { m in
-                        Button("\(m) 分") { center.startCountdown(minutes: Double(m), label: countdownLabel) }
+                        Button("\(m) 分") { center.startCountdown(seconds: Double(m * 60), label: countdownLabel) }
                     }
                 }
-                Form {
-                    Stepper("自訂 \(countdownMinutes) 分鐘", value: $countdownMinutes, in: 1...240)
-                    TextField("要提醒什麼（可以不填）", text: $countdownLabel)
+                HStack(spacing: 10) {
+                    unitField($countdownHours, "時", max: 23)
+                    unitField($countdownMinutes, "分", max: 59)
+                    unitField($countdownSeconds, "秒", max: 59)
                 }
-                Button("開始倒數") { center.startCountdown(minutes: Double(countdownMinutes), label: countdownLabel) }
-                    .keyboardShortcut(.defaultAction)
+                TextField("要提醒什麼（可以不填）", text: $countdownLabel)
+                Button("開始倒數 \(ReminderCenter.durationText(customCountdownSeconds))") {
+                    center.startCountdown(seconds: customCountdownSeconds, label: countdownLabel)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(customCountdownSeconds < 1)
                 Text("例如泡麵 3 分鐘、曬衣服、等洗衣機。時間到她會在旁邊提醒你。")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Divider()
+            soundPicker("時間到的鈴聲", $center.countdownSound)
+            Text("時間到會一直響，按提醒卡片上的按鈕才會停（最多響 3 分鐘）。")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
         .padding(.top, 8)
@@ -380,6 +502,7 @@ struct RemindersView: View {
                         alarmLabel = ""
                     }
                 }
+                soundPicker("鈴聲", $center.alarmSound)
                 if center.alarms.isEmpty {
                     Text("還沒有鬧鐘。").font(.callout).foregroundStyle(.secondary)
                 }
@@ -434,6 +557,36 @@ struct RemindersView: View {
             .padding(.top, 8)
             .padding(.horizontal, 4)
         }
+    }
+}
+
+// 只能打數字的小輸入格。打字時可以整個刪光再重打（空著先不改數字），離開輸入格時空的就當 0。
+private struct NumberField: View {
+    @Binding var value: Int
+    let max: Int
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("0", text: $text)
+            .multilineTextAlignment(.trailing)
+            .focused($focused)
+            .onAppear { text = String(value) }
+            .onChange(of: text) { new in
+                let digits = String(new.filter(\.isNumber).prefix(String(max).count))
+                if digits != new { text = digits; return }
+                guard let n = Int(digits) else { return }
+                if n > max { text = String(max) }
+                value = Swift.min(n, max)
+            }
+            .onChange(of: value) { v in
+                // 按上下箭頭改了數字：輸入格跟著變（打字中空著的時候不要硬塞 0 回去）
+                if Int(text) != v, !(text.isEmpty && focused) { text = String(v) }
+            }
+            .onChange(of: focused) { f in
+                if !f { text = String(value) }
+            }
+            .onSubmit { text = String(value) }
     }
 }
 

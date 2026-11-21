@@ -4,7 +4,8 @@
 // 由 AppDelegate 收到 onReminder 之後處理。
 //
 // 溫和的原則：
-//   - 不搶焦點、不跳系統通知、不用刺耳的鈴聲；卡片出現在她旁邊，按「好」就收起來。
+//   - 不搶焦點、不跳系統通知；卡片出現在她旁邊，按「好」就收起來。
+//   - 倒數、鬧鐘時間到會一直響鈴（鈴聲可以選、可以試聽），按卡片上任一個按鈕才停；其他提醒只輕輕響一聲。
 //   - 喝水提醒：你離開電腦（5 分鐘沒動鍵盤滑鼠）時不提醒，回來後重新計時。
 //   - 番茄鐘專注中她會安靜一點（不自己碎念）。
 //
@@ -36,8 +37,11 @@ final class ReminderCenter: ObservableObject {
     var onReminder: ((Reminder) -> Void)?
     var onTick: (() -> Void)?   // 每秒一次（更新選單列的倒數）
 
-    // 提醒時輕輕響一聲
+    // 番茄鐘、喝水、行事曆提醒時輕輕響一聲
     @Published var soundOn: Bool { didSet { defaults.set(soundOn, forKey: "reminderSound") } }
+    // 倒數、鬧鐘的鈴聲（系統音效的名字；"" = 不響）
+    @Published var countdownSound: String { didSet { defaults.set(countdownSound, forKey: "countdownSound") } }
+    @Published var alarmSound: String { didSet { defaults.set(alarmSound, forKey: "alarmSound") } }
 
     // MARK: - 番茄鐘
 
@@ -138,8 +142,8 @@ final class ReminderCenter: ObservableObject {
 
     @Published private(set) var countdown: CountdownState? { didSet { save(countdown, "countdown") } }
 
-    func startCountdown(minutes: Double, label: String) {
-        let seconds = max(1, minutes * 60)
+    func startCountdown(seconds: Double, label: String) {
+        let seconds = max(1, seconds)
         countdown = CountdownState(label: label, total: seconds, endsAt: Date().addingTimeInterval(seconds))
     }
 
@@ -166,13 +170,12 @@ final class ReminderCenter: ObservableObject {
         guard let c = countdown, c.pausedLeft == nil, let end = c.endsAt, now >= end else { return }
         countdown = nil
         let label = c.label.trimmingCharacters(in: .whitespaces)
-        let minutes = Int((c.total / 60).rounded())
         onReminder?(Reminder(
             kind: .countdown, icon: "⏰", title: label.isEmpty ? "時間到了" : "時間到：\(label)",
-            message: "\(minutes) 分鐘的倒數結束了。",
+            message: "\(Self.durationText(c.total))的倒數結束了。",
             actions: [
                 .init(title: "好") {},
-                .init(title: "再 5 分鐘") { [weak self] in self?.startCountdown(minutes: 5, label: label) },
+                .init(title: "再 5 分鐘") { [weak self] in self?.startCountdown(seconds: 5 * 60, label: label) },
             ]))
     }
 
@@ -269,7 +272,7 @@ final class ReminderCenter: ObservableObject {
                 message: "現在 \(alarm.timeText)，別忘了喔。",
                 actions: [
                     .init(title: "知道了") {},
-                    .init(title: "10 分鐘後") { [weak self] in self?.startCountdown(minutes: 10, label: label.isEmpty ? "鬧鐘" : label) },
+                    .init(title: "10 分鐘後") { [weak self] in self?.startCountdown(seconds: 10 * 60, label: label.isEmpty ? "鬧鐘" : label) },
                 ]))
         }
     }
@@ -382,6 +385,8 @@ final class ReminderCenter: ObservableObject {
         calendarEnabled = d.bool(forKey: "calendarEnabled")
         calendarLead = d.object(forKey: "calendarLead") as? Int ?? 10
         soundOn = d.object(forKey: "reminderSound") as? Bool ?? true
+        countdownSound = d.string(forKey: "countdownSound") ?? "Glass"
+        alarmSound = d.string(forKey: "alarmSound") ?? "Funk"
         alarms = Self.load([Alarm].self, "alarms") ?? []
         firedEvents = Self.load([String: Date].self, "firedEvents") ?? [:]
         pomodoro = Self.load(PomodoroState.self, "pomodoro") ?? PomodoroState()
@@ -463,9 +468,84 @@ final class ReminderCenter: ObservableObject {
         return nil
     }
 
+    // 「1 小時 5 分 30 秒」這種說法（0 的部分省略）。
+    static func durationText(_ seconds: Double) -> String {
+        let s = Int(seconds.rounded())
+        var parts: [String] = []
+        if s >= 3600 { parts.append("\(s / 3600) 小時") }
+        if s / 60 % 60 > 0 { parts.append("\(s / 60 % 60) 分") }
+        if s % 60 > 0 || parts.isEmpty { parts.append("\(s % 60) 秒") }
+        return parts.joined(separator: " ")
+    }
+
     static func clock(_ seconds: Double) -> String {
         let s = Int(seconds.rounded(.up))
         return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
                          : String(format: "%d:%02d", s / 60, s % 60)
+    }
+}
+
+// MARK: - 鈴聲
+
+// 倒數、鬧鐘時間到的鈴聲：選好的系統音效「叮、叮——停一下」一直重複，直到 stop()。
+// 試聽也用它（響幾秒就自己停）。同一時間只會有一個鈴聲在響。
+@MainActor
+final class Ringer: ObservableObject {
+    static let shared = Ringer()
+
+    // 可以選的鈴聲：macOS 內建的系統音效（/System/Library/Sounds）。"" = 不響。
+    static let sounds = ["Glass", "Funk", "Hero", "Ping", "Submarine", "Blow", "Bottle", "Frog", "Morse", "Pop", "Purr", "Sosumi", "Tink", "Basso"]
+    static let maxRing: Double = 3 * 60   // 一直沒人按也最多響 3 分鐘
+
+    @Published private(set) var previewing: String?   // 正在試聽的鈴聲
+
+    private var timer: Timer?
+    private var step = 0
+    private var playing: NSSound?
+    private var stopAt = Date.distantPast
+
+    func ring(_ name: String) {
+        start(name, for: Self.maxRing)
+        previewing = nil
+    }
+
+    // 試聽：響 4 秒；再按一次就停。
+    func togglePreview(_ name: String) {
+        if previewing == name { stop(); return }
+        start(name, for: 4)
+        previewing = name
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        playing?.stop()
+        playing = nil
+        previewing = nil
+    }
+
+    private func start(_ name: String, for seconds: Double) {
+        stop()
+        guard !name.isEmpty, let sound = NSSound(named: name) else { return }
+        step = 0
+        stopAt = Date().addingTimeInterval(seconds)
+        // 每 0.22 秒一格：前 4 格連續響（嘟、嘟、嘟、嘟），之後安靜 3 格，一輪約 1.5 秒。
+        // 響下一聲前先停掉上一聲，長一點的音效才不會疊成一團。
+        let timer = Timer(timeInterval: 0.22, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if Date() >= self.stopAt { self.stop(); return }
+                if self.step % 7 < 4, let s = sound.copy() as? NSSound {
+                    self.playing?.stop()
+                    s.volume = 0.7
+                    s.play()
+                    self.playing = s
+                }
+                self.step += 1
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+        timer.fire()
     }
 }
