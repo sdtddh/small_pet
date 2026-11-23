@@ -130,12 +130,19 @@ private struct ReminderCardView: View {
             }
             HStack(spacing: 6) {
                 Spacer()
-                let actions = reminder.actions.isEmpty ? [Reminder.Action(title: "好") {}] : reminder.actions
-                ForEach(Array(actions.enumerated()), id: \.offset) { i, action in
-                    if i == 0 {
-                        Button(action.title) { onTap(action) }.buttonStyle(.borderedProminent).controlSize(.small)
-                    } else {
-                        Button(action.title) { onTap(action) }.buttonStyle(.bordered).controlSize(.small)
+                // 按鈕一樣寬：每個按鈕的字至少佔 64 點（「再 5 分鐘」「跳過休息」都放得下）
+                HStack(spacing: 6) {
+                    let actions = reminder.actions.isEmpty ? [Reminder.Action(title: "好") {}] : reminder.actions
+                    ForEach(Array(actions.enumerated()), id: \.offset) { i, action in
+                        let button = Button { onTap(action) } label: {
+                            Text(action.title).frame(minWidth: 64)
+                        }
+                        .controlSize(.small)
+                        if i == 0 {
+                            button.buttonStyle(.borderedProminent)
+                        } else {
+                            button.buttonStyle(.bordered)
+                        }
                     }
                 }
             }
