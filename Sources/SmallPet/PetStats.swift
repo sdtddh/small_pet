@@ -19,6 +19,14 @@ struct GameState: Codable {
         var text: String
         var id: Date { date }
     }
+    // 上一次冒險的結果：等使用者在「地下城」頁按「確認」才清掉。
+    struct Report: Codable {
+        var date: Date
+        var dungeonID: String
+        var won: Bool
+        var reward: String        // 拿到的東西：「「草帽」」或「零食 ×1」；失敗是空字串
+        var power: Int            // 出發時的戰鬥力
+    }
 
     var level = 1
     var xp = 0                // 這一級已經累積的 XP
@@ -30,6 +38,7 @@ struct GameState: Codable {
     var runsUsed = 0          // 那一天已經出門幾次
     var run: Run?             // 正在冒險中（nil 代表在家）
     var log: [LogEntry] = []  // 戰報，新的在前面
+    var report: Report?       // 還沒確認的冒險結果
 
     init() {}
 
@@ -47,6 +56,7 @@ struct GameState: Codable {
         runsUsed = try c.decodeIfPresent(Int.self, forKey: .runsUsed) ?? d.runsUsed
         run = try c.decodeIfPresent(Run.self, forKey: .run)
         log = try c.decodeIfPresent([LogEntry].self, forKey: .log) ?? d.log
+        report = try c.decodeIfPresent(Report.self, forKey: .report)
     }
 }
 
@@ -87,6 +97,7 @@ final class PetStats: ObservableObject {
     var power: Int { state.level * 10 + outfitBonus }
     var snacks: Int { state.snacks }
     var run: GameState.Run? { state.run }
+    var report: GameState.Report? { state.report }
 
     // 今天還能餵幾次（跨日就自動恢復）。
     var feedsLeft: Int {
@@ -212,8 +223,23 @@ final class PetStats: ObservableObject {
         }
         state.log.insert(GameState.LogEntry(date: Date(), text: text), at: 0)
         if state.log.count > Self.maxLog { state.log.removeLast(state.log.count - Self.maxLog) }
+        let rewardText: String
+        switch reward {
+        case .outfit(_, let name)?: rewardText = "「\(name)」"
+        case .snack?: rewardText = "零食 ×1"
+        case nil: rewardText = ""
+        }
+        state.report = GameState.Report(date: Date(), dungeonID: dungeon.id, won: reward != nil,
+                                        reward: rewardText, power: run.power)
         save()
         return RunResult(dungeon: dungeon, reward: reward)
+    }
+
+    // 使用者在「地下城」頁看過結果、按了確認。
+    func acknowledgeReport() {
+        guard state.report != nil else { return }
+        state.report = nil
+        save()
     }
 
     // MARK: - 存檔

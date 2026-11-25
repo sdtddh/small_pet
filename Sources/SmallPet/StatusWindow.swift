@@ -28,7 +28,7 @@ final class StatusWindowController {
     func show() {
         if window == nil {
             let w = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 360, height: 650),
+                contentRect: NSRect(x: 0, y: 0, width: 360, height: 700),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -96,7 +96,7 @@ struct StatusView: View {
                 permissionsTab.tabItem { Text("權限") }.tag(Tab.permissions)
             }
             .padding()
-            .frame(minWidth: 360, minHeight: 650)
+            .frame(minWidth: 360, minHeight: 700)
         }
     }
 
@@ -250,6 +250,9 @@ struct StatusView: View {
 
     private func dungeonTab(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            if let report = stats.report {
+                reportCard(report)
+            }
             if let run = stats.run, let dungeon = Dungeon.find(run.dungeonID) {
                 let left = max(0, Int(run.endsAt.timeIntervalSince(now)))
                 Label("正在\(dungeon.name)冒險，還要 \(left / 60):\(String(format: "%02d", left % 60))",
@@ -292,6 +295,33 @@ struct StatusView: View {
             Spacer(minLength: 0)
         }
         .padding(.top, 8)
+    }
+
+    // 上一次冒險的結果：一直留著，直到按「確認」。
+    private func reportCard(_ report: GameState.Report) -> some View {
+        let name = Dungeon.find(report.dungeonID)?.name ?? report.dungeonID
+        let color: Color = report.won ? .green : .orange
+        return HStack(alignment: .center, spacing: 10) {
+            Image(systemName: report.won ? "trophy.fill" : "xmark.octagon.fill")
+                .font(.title2)
+                .foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(name)：冒險\(report.won ? "成功！" : "失敗…")").font(.headline)
+                Text(report.won ? "拿到\(report.reward)" : "出發時戰鬥力 \(report.power)，什麼都沒拿到")
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(report.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("確認") { stats.acknowledgeReport() }
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 10).fill(color.opacity(0.15)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.6)))
     }
 
     // 這個地下城還剩哪些服裝沒拿到：拿過的顯示名稱，沒拿過的顯示 ???；全拿完就只會掉零食。
