@@ -21,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let reminders = ReminderCenter()
     private let reminderCard = ReminderCardController()
     private lazy var remindersWindow = RemindersWindowController(center: reminders)
+    // 背單字：Anki 翻卡小面板與「單字本」視窗
+    private let vocab = VocabCenter()
+    private lazy var vocabCard = VocabCardController(center: vocab)
+    private lazy var vocabWindow = VocabWindowController(center: vocab, stats: stats)
     private var boss: BossWindow?
     private var bossHidden = false   // 往下拉藏起來了，她也一起藏（只算這場戰鬥，選單上「戰鬥中」或 ⌥F 叫得回來）
     // 試打 boss：不算冒險次數、不存檔、不給戰利品，打 15 秒看看效果。
@@ -103,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         setupStatusItem()
         setUpReminders()
+        setUpVocab()
         startAnimating()
     }
 
@@ -146,6 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(wardrobeItem)
 
         menu.addItem(makeReminderMenuItem())
+        menu.addItem(makeVocabMenuItem())
 
         // 動作：
         //   說句話——只是讓她說一句，不會改變正在做的動作，也不影響自動行動
@@ -338,6 +344,108 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pet.speech.sayText("今天第 \(reminders.cupsToday) 杯 💧")
     }
 
+    // MARK: - 背單字
+
+    private func setUpVocab() {
+        vocabCard.anchor = { [weak self] in
+            guard let self, !self.pet.concealed, self.pet.travel != .away else { return nil }
+            return self.pet.window.frame
+        }
+        vocabCard.onOpenWindow = { [weak self] in self?.vocabWindow.show() }
+        vocab.canRemind = { [weak self] in
+            guard let self else { return false }
+            return !self.pet.concealed && self.pet.travel == .none && !self.reminders.focusing && !self.vocabCard.isVisible
+        }
+        vocab.onUnstudiedReminder = { [weak self] in self?.remindUnstudiedVocab() }
+        vocab.onStudyEvent = { [weak self] event in self?.handleVocabEvent(event) }
+    }
+
+    private func makeVocabMenuItem() -> NSMenuItem {
+        let sub = NSMenu()
+        let streakText = vocab.streak > 0 ? "・🔥 \(vocab.streak) 天" : ""
+        sub.addItem(NSMenuItem(title: "🎯 今日已學 \(vocab.studiedToday) / \(vocab.dailyGoal) 字\(streakText)", action: nil, keyEquivalent: ""))
+        sub.addItem(.separator())
+
+        let cardItem = NSMenuItem(title: vocabCard.isVisible ? "收起旁邊的單字卡" : "在旁邊翻卡背單字",
+                                  action: #selector(toggleDesktopVocab), keyEquivalent: "")
+        cardItem.target = self
+        sub.addItem(cardItem)
+
+        let windowItem = NSMenuItem(title: "單字本…", action: #selector(openVocab), keyEquivalent: "")
+        windowItem.target = self
+        sub.addItem(windowItem)
+
+        let decksItem = NSMenuItem(title: "詞庫與匯入…", action: #selector(openVocabDecks), keyEquivalent: "")
+        decksItem.target = self
+        sub.addItem(decksItem)
+
+        let item = NSMenuItem(title: "背單字", action: nil, keyEquivalent: "")
+        item.submenu = sub
+        return item
+    }
+
+    @objc private func toggleDesktopVocab() {
+        if vocabCard.isVisible {
+            vocabCard.hide()
+        } else {
+            startDesktopVocab()
+        }
+    }
+
+    @objc private func openVocab() { vocabWindow.show(tab: .study) }
+    @objc private func openVocabDecks() { vocabWindow.show(tab: .decks) }
+
+    private func startDesktopVocab() {
+        setEverythingConcealed(false)
+        vocabCard.showStudy()
+    }
+
+    private func remindUnstudiedVocab() {
+        guard !pet.concealed, pet.travel == .none else { return }
+        if reminders.soundOn, let sound = NSSound(named: "Tink")?.copy() as? NSSound {
+            sound.volume = 0.35
+            sound.play()
+        }
+        vocabCard.showUnstudiedReminder()
+        pet.speech.say("study_remind")
+        if pet.canAct, !pet.isBusy { pet.perform(.jump) }
+    }
+
+    private func handleVocabEvent(_ event: VocabCenter.StudyEvent) {
+        switch event {
+        case .again:
+            if !pet.concealed, pet.travel == .none {
+                pet.speech.say("study_again", chance: 0.7, force: true)
+            }
+        case .remembered(let rating, _, let reachedDailyGoal):
+            if reachedDailyGoal {
+                celebrateStudyGoal()
+            } else if !pet.concealed, pet.travel == .none {
+                let chance = rating == .easy ? 0.45 : 0.22
+                pet.speech.say("study_good", chance: chance, force: true)
+            }
+        case .goalReached:
+            celebrateStudyGoal()
+        }
+    }
+
+    // 今日單字達標：領獎（每天一次）並讓她慶祝。
+    private func celebrateStudyGoal() {
+        if let reward = stats.claimStudyGoalReward() {
+            if !pet.concealed, pet.travel == .none {
+                if let newLevel = reward.newLevel {
+                    pet.speech.sayText("今日單字達標！升到 Lv.\(newLevel) 了，拿到零食 ×1 ✨")
+                } else {
+                    pet.speech.sayText("今日單字達標！+\(reward.xp) XP & 零食 ×1 ✨")
+                }
+                if pet.canAct, !pet.isBusy { pet.interlude(.dance) }
+            }
+        } else if !pet.concealed, pet.travel == .none {
+            pet.speech.say("study_goal")
+            if pet.canAct, !pet.isBusy { pet.interlude(.dance, duration: 2.5) }
+        }
+    }
+
     @objc private func performAction(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let action = PetAction(rawValue: raw) else { return }
         setEverythingConcealed(false)
@@ -365,6 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setEverythingConcealed(_ on: Bool) {
         if !on, bossHidden { setBossHidden(false) }   // 顯示全部：連打 boss 的她和 boss 一起叫回來
         guard on != pet.concealed else { return }
+        if on { vocabCard.hide() }
         pet.setConcealed(on)
         scenery.setConcealed(on, below: pet.window)
         if let boss {
@@ -407,6 +516,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         scenery.clock.window.onSwipeUp = { [weak self] in
             guard let self else { return }
             self.remindersWindow.show(above: self.scenery.clock.window.frame)
+        }
+        scenery.bookshelf.window.onSwipeUp = { [weak self] in
+            guard let self else { return }
+            self.vocabWindow.show(above: self.scenery.bookshelf.window.frame)
         }
         scenery.bed.window.onSwipeUp = {
             // 等往上伸的動畫彈回來再關，看起來比較順。
@@ -538,6 +651,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.visit(prop, doing: .bed)
             } else if prop === self.scenery.clock {
                 self.waterPlant()
+            } else if prop === self.scenery.bookshelf {
+                self.startDesktopVocab()
             }
         }
     }
@@ -775,6 +890,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.lastTick = now
                 if !self.pet.concealed {   // 藏起來時暫停；冒險時間到了等顯示回來才回家
                     self.pet.tick(dt: dt)
+                    if self.vocabCard.isVisible { self.vocabCard.follow(self.pet.window.frame) }
                     self.updateBoss()
                     self.checkRun()
                     self.checkProps()

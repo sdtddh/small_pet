@@ -26,6 +26,7 @@ final class Scenery {
     let gauge: SystemGauge
     let clock: Prop
     let clockFace: ClockFace
+    let bookshelf: Prop
     private let blanket: SceneryWindow
     // 上次檢查視窗前後順序的時間。問 orderedIndex 要跟系統的視窗伺服器整理一次全部視窗，很貴，
     // 每一幀都問會讓 SmallPet 和 WindowServer 一直吃 CPU；隔一小段時間檢查一次就夠了。
@@ -39,7 +40,7 @@ final class Scenery {
         lastOrderCheck = now
         return true
     }
-    var all: [Prop] { [dining, computer, bed, monitor, clock] }
+    var all: [Prop] { [dining, computer, bed, monitor, clock, bookshelf] }
 
     // 家具總開關（選單切換）。打開時只顯示有勾選的那幾件（Prop.enabled）。
     private(set) var pinned: Bool {
@@ -70,6 +71,8 @@ final class Scenery {
         clock = Prop(sprites: sprites, title: "時鐘（番茄鐘）", name: ClockLook.current.propName, activeName: nil,
                      key: "scenery.clock.ground.x", defaultX: mid - 150)
         clockFace = ClockFace(on: clock.window)
+        bookshelf = Prop(sprites: sprites, title: "小書架（背單字）", name: "bookshelf", activeName: nil,
+                         key: "scenery.bookshelf.x", defaultX: mid + 80)
         blanket = SceneryWindow(image: sprites.prop("bed_front"))
         blanket.ignoresMouseEvents = true
         pinned = UserDefaults.standard.bool(forKey: "scenery.visible")

@@ -39,6 +39,7 @@ struct GameState: Codable {
     var run: Run?             // 正在冒險中（nil 代表在家）
     var log: [LogEntry] = []  // 戰報，新的在前面
     var report: Report?       // 還沒確認的冒險結果
+    var studyDay = ""         // 最後一次領取每日背單字達標獎勵是哪一天（yyyy-MM-dd）
 
     init() {}
 
@@ -57,6 +58,7 @@ struct GameState: Codable {
         run = try c.decodeIfPresent(Run.self, forKey: .run)
         log = try c.decodeIfPresent([LogEntry].self, forKey: .log) ?? d.log
         report = try c.decodeIfPresent(Report.self, forKey: .report)
+        studyDay = try c.decodeIfPresent(String.self, forKey: .studyDay) ?? d.studyDay
     }
 }
 
@@ -66,6 +68,7 @@ final class PetStats: ObservableObject {
     // 可以調整的數值。
     static let feedsPerDay = 2
     static let xpPerFeed = 20
+    static let xpPerStudyGoal = 30
     static func xpToNext(level: Int) -> Int { 50 * level }
     static let maxLog = 20
 
@@ -147,6 +150,29 @@ final class PetStats: ObservableObject {
         }
         save()
         return .fed(xp: Self.xpPerFeed, newLevel: state.level > before ? state.level : nil)
+    }
+
+    // MARK: - 背單字每日達標獎勵
+
+    var studiedRewardClaimedToday: Bool {
+        state.studyDay == Self.today()
+    }
+
+    // 完成每日背單字目標：給目前角色 +30 XP 與零食 ×1（每天最多領 1 次）。
+    func claimStudyGoalReward() -> (xp: Int, newLevel: Int?)? {
+        guard !studiedRewardClaimedToday else { return nil }
+        state.studyDay = Self.today()
+        state.snacks += 1
+        let before = state.level
+        state.xp += Self.xpPerStudyGoal
+        while state.xp >= xpNeeded {
+            state.xp -= xpNeeded
+            state.level += 1
+        }
+        state.log.insert(GameState.LogEntry(date: Date(), text: "背單字達標：+\(Self.xpPerStudyGoal) XP、拿到零食 ×1 📚"), at: 0)
+        if state.log.count > Self.maxLog { state.log.removeLast(state.log.count - Self.maxLog) }
+        save()
+        return (Self.xpPerStudyGoal, state.level > before ? state.level : nil)
     }
 
     // MARK: - 地下城

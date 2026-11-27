@@ -3669,9 +3669,86 @@ func drawPumpkin(_ ctx: CGContext) {
     drawClockTicks(ctx, CGPoint(x: 32, y: 24))
 }
 
+// MARK: - 小書架（背單字）
+//
+// bookshelf.png：雙層木頭小書架，擺滿彩色書本與一疊單字閃卡，頂上有一株小嫩芽。
+// 左右拖移動、往下拉收起來、往上拉打開「單字本」視窗；把寵物拖上去放手會在旁邊開始翻卡背單字。
+let bookshelfWidth: CGFloat = 68, bookshelfHeight: CGFloat = 92
+
+func drawBookshelf(_ ctx: CGContext) {
+    let woodInside = hex(0x7A512D)
+    let cream = hex(0xFFF8E8)
+    let leaf = hex(0x6CC46A), leafDark = hex(0x4E9E4F)
+
+    // 櫃腳（貼齊 ground）
+    for x in [CGFloat(11), 52] {
+        shape(ctx, rounded(x, ground, 5, 8, 1.5), woodDark, lineWidth: 1.6)
+    }
+    // 木頭外框與頂板
+    shape(ctx, rounded(6, 10, 56, 66, 5), wood, lineWidth: 1.9)
+    shape(ctx, rounded(4, 73, 60, 5.5, 2.2), woodDark, lineWidth: 1.7)
+
+    // 上下兩層書格內凹背景
+    shape(ctx, rounded(10, 44, 48, 25, 2.5), woodInside, lineWidth: 1.5)
+    shape(ctx, rounded(10, 14, 48, 25, 2.5), woodInside, lineWidth: 1.5)
+    // 中間層板
+    shape(ctx, rounded(8, 40, 52, 4.5, 1.5), woodDark, lineWidth: 1.5)
+
+    // 上層書本（紅、藍、黃直立，綠色微斜靠著）
+    let topBooks: [(x: CGFloat, h: CGFloat, w: CGFloat, c: CGColor, band: CGColor)] = [
+        (12.5, 20, 7.5, hex(0xE8604C), cream),
+        (21.0, 22, 8.5, hex(0x5BA4E5), hex(0xFFF3B0)),
+        (30.5, 18.5, 7.0, hex(0xF2C14E), hex(0x9C6B3C)),
+    ]
+    for b in topBooks {
+        shape(ctx, rounded(b.x, 44.5, b.w, b.h, 1.6), b.c, lineWidth: 1.5)
+        line(ctx, segment(CGPoint(x: b.x + 1.5, y: 44.5 + b.h - 4),
+                          CGPoint(x: b.x + b.w - 1.5, y: 44.5 + b.h - 4)), b.band, width: 1.2)
+    }
+    withState(ctx, {
+        $0.translateBy(x: 44, y: 44.5)
+        $0.rotate(by: 0.20)
+    }) {
+        shape(ctx, rounded(0, 0, 7.5, 20.5, 1.6), hex(0x7CC47F), lineWidth: 1.5)
+        line(ctx, segment(CGPoint(x: 1.5, y: 16), CGPoint(x: 6, y: 16)), cream, width: 1.2)
+    }
+
+    // 下層書本（紫、橘）＋ 右側一疊白色單字閃卡與紅書籤
+    shape(ctx, rounded(12.5, 14.5, 9, 21, 1.6), hex(0xA582D9), lineWidth: 1.5)
+    line(ctx, segment(CGPoint(x: 14, y: 31), CGPoint(x: 20, y: 31)), cream, width: 1.2)
+    shape(ctx, rounded(22.5, 14.5, 7.5, 19, 1.6), hex(0xF59A3A), lineWidth: 1.5)
+
+    // 單字卡疊（兩層卡片感）
+    shape(ctx, rounded(34, 14.5, 21, 6, 1.5), hex(0xEFE4CE), lineWidth: 1.4)
+    shape(ctx, rounded(33, 19, 21, 6.5, 1.5), cream, lineWidth: 1.4)
+    line(ctx, segment(CGPoint(x: 37, y: 22.3), CGPoint(x: 49, y: 22.3)), outline, width: 1.1)
+    // 小紅書籤垂下來
+    shape(ctx, rounded(48, 16.5, 3.2, 5, 0.8), hex(0xE0383A), lineWidth: 1.1)
+
+    // 櫃頂：一本平放的小單字本 + 冒出來的小嫩芽
+    shape(ctx, rounded(13, 78.5, 20, 5, 1.5), hex(0x5BA4E5), lineWidth: 1.4)
+    shape(ctx, rounded(14.5, 79.7, 17, 2.6, 1.0), cream, stroke: false)
+    let sproutStem = CGMutablePath()
+    sproutStem.move(to: CGPoint(x: 49, y: 78.5))
+    sproutStem.addQuadCurve(to: CGPoint(x: 50, y: 85), control: CGPoint(x: 48.5, y: 82))
+    line(ctx, sproutStem, outline, width: 2.2)
+    line(ctx, sproutStem, leafDark, width: 1.2)
+    let leftLeaf = CGMutablePath()
+    leftLeaf.move(to: CGPoint(x: 49.8, y: 84))
+    leftLeaf.addQuadCurve(to: CGPoint(x: 43.5, y: 87.5), control: CGPoint(x: 45, y: 88.5))
+    leftLeaf.addQuadCurve(to: CGPoint(x: 49.8, y: 84), control: CGPoint(x: 47, y: 83))
+    shape(ctx, leftLeaf, leaf, lineWidth: 1.3)
+    let rightLeaf = CGMutablePath()
+    rightLeaf.move(to: CGPoint(x: 50.2, y: 84.5))
+    rightLeaf.addQuadCurve(to: CGPoint(x: 56.5, y: 88), control: CGPoint(x: 55, y: 89))
+    rightLeaf.addQuadCurve(to: CGPoint(x: 50.2, y: 84.5), control: CGPoint(x: 53.5, y: 83.5))
+    shape(ctx, rightLeaf, leaf, lineWidth: 1.3)
+}
+
 if previewFrames == nil {
 try write(renderPNG(width: tomatoClockWidth, height: tomatoClockHeight, offset: 0) { drawTomatoClock($0) }, "props/clock_tomato.png")
 try write(renderPNG(width: pumpkinClockWidth, height: pumpkinClockHeight, offset: 0) { drawPumpkinClock($0) }, "props/clock_pumpkin.png")
+try write(renderPNG(width: bookshelfWidth, height: bookshelfHeight, offset: 0) { drawBookshelf($0) }, "props/bookshelf.png")
 try write(renderPNG(height: canopyHeight, offset: 0) { drawCanopy($0) }, "props/parachute.png")
 try write(renderPNG(width: diningWidth - seatTrim, height: diningHeight, offset: offsetX - seatTrim) { drawDining($0, meal: false) }, "props/dining.png")
 try write(renderPNG(width: diningWidth - seatTrim, height: diningHeight, offset: offsetX - seatTrim) { drawDining($0, meal: true) }, "props/dining_meal.png")
